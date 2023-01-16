@@ -13,7 +13,7 @@
         <Variable Name="Dist" Value="..\dist"/>
     </Variables>
     <Imports>
-        <Import>@MyProject\Scripts\Source</Import>
+        <Import>@MyProject\Source\Scripts</Import>
         <Import>@MyProject\Dependencies</Import>
         <Import>https://github.com/MrOctopus/nl_online/tree/main/jcontainersse/source</Import>
         <Import>https://github.com/VersuchDrei/ConsoleUtilSSE/tree/master/papyrus</Import>
@@ -28,11 +28,12 @@
         <Import>https://github.com/ersh1/Precision/tree/main/scripts/source</Import>
     </Imports>
     <Folders>
-        <Folder>@MyProject\Scripts\Source</Folder>
+        <Folder>@MyProject\Source\Scripts</Folder>
     </Folders>
     <ZipFiles Output="@Dist">
         <ZipFile Name="@ModName - @Version" RootDir="@MyProject" Compression="deflate">
             <Include>Scripts</Include>
+            <Include>Source</Include>
             <Include>*.esp</Include>
             <Include>Interface/</Include>
         </ZipFile>
