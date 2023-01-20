@@ -24,6 +24,7 @@ int property MaxNight auto
 bool property ONpcDisabled auto
 
 bool property AllowActiveFollowers auto
+bool property AllowElderRace auto
 bool property AllowPlayerThreesomes auto
 bool property AllowCommonEnemies auto
 bool property StopWhenFound auto
@@ -66,6 +67,8 @@ Keyword property LocTypeInn auto
 Keyword property LocTypeGuild auto
 Keyword property LocTypeDungeon auto
 
+Race property ElderRace auto
+
 OSexIntegrationMain property OStim auto
 
 Quest property ONpcSubthreadQuest auto
@@ -73,6 +76,19 @@ Quest property ONpcSubthreadQuest auto
 int property NPCsInScene auto
 int property FurnituresInUse auto
 int property NPCsHadSexThisNight auto
+
+bool OPrivacyInstalled
+
+Faction OPFollowFaction
+
+Package OPFollowPackage
+Package OPApproachFGF1
+Package OPApproachFGF2
+Package OPApproachFGF1Follower
+Package OPApproachElisif
+Package OPApproachF1HouseCarls
+Package OPApproachCoralyn
+Package OPCoraApproachFollower
 
 
 Event OnInit()
@@ -95,7 +111,22 @@ EndEvent
 Function OnLoad()
 	Scanning = false
 	ActiveScenes = 0
-	
+
+	OPrivacyInstalled = Game.IsPluginInstalled("OPrivacy.esp")
+
+	if (OPrivacyInstalled)
+		OPFollowFaction = Game.GetFormFromFile(0x00015C34, "OPrivacy.esp") as Faction
+
+		OPFollowPackage = GetOPrivacyPackage(0x000012C3)
+		OPApproachFGF1 = GetOPrivacyPackage(0x00131C1E)
+		OPApproachFGF2 = GetOPrivacyPackage(0x0010E4C1)
+		OPApproachFGF1Follower = GetOPrivacyPackage(0x00131C1D)
+		OPApproachElisif = GetOPrivacyPackage(0x001A1365)
+		OPApproachF1HouseCarls = GetOPrivacyPackage(0x001C9B8D)
+		OPApproachCoralyn = GetOPrivacyPackage(0x004297FF)
+		OPCoraApproachFollower = GetOPrivacyPackage(0x00442D10)
+	endif
+
 	if !ONpcDisabled
 		RegisterForSingleUpdate(scanfreq)
 	endif
@@ -108,23 +139,23 @@ Event OnUpdate()
 		bool isNightTime = IsNight()
 	
 		if !Scanning && isNightTime && !PlayerRef.IsInCombat() && ActiveScenes < MaxScenes && LocationIsValid()
-			OSexIntegrationMain.Console("scanning!")
+			PrintToConsole("scanning!")
 
 			ONpcSubthread subthreadToUse = GetUnusedSubthread()
-			OSexIntegrationMain.Console(subthreadToUse)
+			PrintToConsole(subthreadToUse)
 
 			if subthreadToUse
 				Scan(subthreadToUse)
 			endif
 		endif
 
-		OSexIntegrationMain.Console("Scan is over! Checking for night...")
+		PrintToConsole("Scan is over! Checking for night...")
 
 		if isNightTime
-			OSexIntegrationMain.Console("Is night!!")
+			PrintToConsole("Is night!!")
 			RegisterForSingleUpdate(scanfreq)
 		else
-			OSexIntegrationMain.Console("Is not night...")
+			PrintToConsole("Is not night...")
 			RegisterForSingleUpdateGameTime(GetTimeUntilNight())
 		endif
 	endif
@@ -132,7 +163,7 @@ EndEvent
 
 
 Event OnUpdateGameTime()
-	OSexIntegrationMain.Console("Night has fallen....")
+	PrintToConsole("Night has fallen....")
 	JArray.Clear(NPCsHadSexThisNight)
 	RegisterForSingleUpdate(scanfreq)
 EndEvent
@@ -140,11 +171,11 @@ EndEvent
 
 Function Scan(ONpcSubthread SubthreadToUse)
 	Scanning = true
-	OSexIntegrationMain.Console("now scanning!")
+	PrintToConsole("now scanning!")
 
-	OSexIntegrationMain.Console("Scan radius is " + ScanRadius)
+	PrintToConsole("Scan radius is " + ScanRadius)
 	GetSurroundingActors()
-	OSexIntegrationMain.Console("Actors length is " + Actors.length)
+	PrintToConsole("Actors length is " + Actors.length)
 
 	if !Actors.length
 		return
@@ -156,7 +187,7 @@ Function Scan(ONpcSubthread SubthreadToUse)
 
 	string SexType = GetSexType()
 
-	OSexIntegrationMain.Console("Sex type is " + SexType)
+	PrintToConsole("Sex type is " + SexType)
 
 	if SexType == "mf" || SexType == "threesome"
 		if !ActorsMale.length || !ActorsFemale.length
@@ -190,13 +221,13 @@ Function Scan(ONpcSubthread SubthreadToUse)
 		endif
 	endif
 
-	OSexIntegrationMain.Console("Dom Actor is " + Dom.GetActorBase().GetName())
-	OSexIntegrationMain.Console("Sub Actor is " + Sub.GetActorBase().GetName())
+	PrintToConsole("Dom Actor is " + Dom.GetActorBase().GetName())
+	PrintToConsole("Sub Actor is " + Sub.GetActorBase().GetName())
 
-	OSexIntegrationMain.Console("Checking if Actors are loaded")
+	PrintToConsole("Checking if Actors are loaded")
 
 	if Dom.Is3DLoaded() && Sub.Is3DLoaded() && (!Third || Third.Is3DLoaded())
-		OSexIntegrationMain.Console("starting scene setup")
+		PrintToConsole("starting scene setup")
 
 		ObjectReference furnitureRef
 
@@ -221,7 +252,7 @@ Function Scan(ONpcSubthread SubthreadToUse)
 		SubthreadToUse.SetupScene(Dom, Sub, furnitureRef, None)
 		Scanning = false
 	else
-		OSexIntegrationMain.Console("They were not loaded")
+		PrintToConsole("They were not loaded")
 		Scanning = false
 	endif
 
@@ -230,7 +261,6 @@ EndFunction
 
 
 Function GetSurroundingActors()
-
 	Actors = MiscUtil.ScanCellNpcs(centeron = PlayerRef, radius = ScanRadius)
 
 	int i = Actors.length
@@ -421,7 +451,7 @@ EndFunction
 
 
 Bool Function ActorIsValid(Actor Act)
-	if IsInvalidNpc(Act) || Act.IsInCombat() || !Act.Is3DLoaded() || Act.IsInDialogueWithPlayer() || IsBard(Act) || OStim.IsActorActive(Act) || IsInJArrays(Act)
+	if IsInvalidNpc(Act) || ActorIsInCombatState(Act) || Act.GetCurrentScene() != None || !Act.Is3DLoaded() || Act.IsInDialogueWithPlayer() || OStim.IsActorActive(Act) || IsInJArrays(Act) || ActorHasOPrivacyPackage(Act)
 		return false
 	endif
 
@@ -429,8 +459,32 @@ Bool Function ActorIsValid(Actor Act)
 EndFunction
 
 
+Bool Function ActorIsInCombatState(Actor Act)
+	return Act.GetCombatState() || Act.IsBleedingOut() || Act.IsWeaponDrawn() || Act.IsUnconscious() || Act.IsInKillMove() || Act.IsArrested() || Act.IsCommandedActor() || Act.IsOnMount()
+EndFunction
+
+
 Bool Function IsInvalidNpc(Actor Act)
-	return !Act || Act == PlayerRef || Act.IsDead() || Act.isDisabled() || Act.IsChild() || !Act.HasKeywordString("ActorTypeNPC") || Act.isGhost()
+	return !Act || Act == PlayerRef || Act.IsDead() || Act.isDisabled() || Act.IsChild() || !Act.HasKeywordString("ActorTypeNPC") || Act.isGhost() || (Act.GetRace() == ElderRace && !AllowElderRace)
+EndFunction
+
+
+Bool Function ActorHasOPrivacyPackage(Actor Act)
+	if OPrivacyInstalled
+		if Act.IsInFaction(OPFollowFaction)
+			return true
+		endif
+
+		bool approachEnabled = (Game.GetFormFromFile(0x001646B2, "OPrivacy.esp") as GlobalVariable).GetValueInt() == 1
+
+		if approachEnabled
+			Package currentActorPackage = Act.GetCurrentPackage()
+
+			return currentActorPackage == OPFollowPackage || currentActorPackage == OPApproachFGF1 || currentActorPackage == OPApproachFGF2 || currentActorPackage == OPApproachFGF1Follower || currentActorPackage == OPApproachElisif || currentActorPackage == OPApproachF1HouseCarls || currentActorPackage == OPApproachCoralyn || currentActorPackage == OPCoraApproachFollower
+		endif
+	endif
+
+	return false
 EndFunction
 
 
@@ -444,11 +498,8 @@ Bool Function IsBard(Actor Act)
 EndFunction
 
 
-Bool Function isEnemy(actor a)
-	if a.isinfaction(banditfaction) || a.isinfaction(forswornfaction) || a.isinfaction(necromancerfaction) || a.isinfaction(warlockfaction) || a.isinfaction(vampirefaction) || a.isinfaction(vampirethrallfaction) || a.isinfaction(dlc2cultistfaction)
-		return true
-	endif
-	return false
+Bool Function isEnemy(Actor Act)
+	return Act.IsInFaction(BanditFaction) || Act.IsInFaction(ForswornFaction) || Act.IsInFaction(NecromancerFaction) || Act.IsInFaction(WarlockFaction) || Act.IsInFaction(VampireFaction) || Act.IsInFaction(VampirethrallFaction) || Act.IsInFaction(Dlc2CultistFaction)
 EndFunction
 
 
@@ -482,7 +533,7 @@ EndFunction
 
 
 Bool Function IsNight()
-	float hour = currenthour()
+	float hour = CurrentHour()
 	if ((hour <= maxnight) || (hour >= minnight))
 		return true
 	endif
@@ -490,10 +541,12 @@ Bool Function IsNight()
 EndFunction
 
 
-Float Function currenthour()
-	float time = utility.getcurrentgametime()
-	time -= math.floor(time)
+Float Function CurrentHour()
+	float time = Utility.GetCurrentGameTime()
+
+	time -= Math.Floor(time)
 	time *= 24
+
 	return time
 EndFunction
 
@@ -510,6 +563,17 @@ Float Function GetTimeUntilNight()
 	endif
 EndFunction
 
+
 Function RestartScanning()
-	RegisterForSingleUpdate(scanfreq)
+	RegisterForSingleUpdate(ScanFreq)
+EndFunction
+
+
+Function PrintToConsole(String In) Global
+	MiscUtil.PrintConsole("OStim NPCs: " + In)
+EndFunction
+
+
+Package Function GetOPrivacyPackage(int PackageID)
+	return Game.GetFormFromFile(PackageID, "OPrivacy.esp") as Package
 EndFunction

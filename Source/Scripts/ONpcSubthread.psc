@@ -31,8 +31,8 @@ EndEvent
 
 
 Event NpcSceneStart(string eventname, string strarg, float numarg, form sender)
-	OSexIntegrationMain.Console("NPC scene started!!")
-	OSexIntegrationMain.Console("IDs are: " + numarg + " and " + CurrentOStimSubthread.id)
+	ONpcMain.PrintToConsole("NPC scene started!!")
+	ONpcMain.PrintToConsole("IDs are: " + numarg + " and " + CurrentOStimSubthread.id)
 
 	if numarg == CurrentOStimSubthread.id
 		JArray.addForm(ONpc.NPCsHadSexThisNight, DomActor)
@@ -63,14 +63,14 @@ EndEvent
 
 
 Function StartScene()
-	OSexIntegrationMain.Console("starting scene!")
+	ONpcMain.PrintToConsole("starting scene!")
 
 	RegisterForModEvent("ostim_subthread_start", "NpcSceneStart")
 	RegisterForModEvent("ostim_subthread_end", "NpcSceneEnd")
 
 	CurrentOStimSubthread = OStim.GetUnusedSubthread()
 
-	if !CurrentOStimSubthread || !CheckActorsStillLoaded() || !CurrentOStimSubthread.StartSubthreadScene(DomActor, SubActor, zThirdActor = ThirdActor, furnitureObj = CurrentFurniture)
+	if !CurrentOStimSubthread || !CheckActorsStillValid() || !CurrentOStimSubthread.StartSubthreadScene(DomActor, SubActor, zThirdActor = ThirdActor, furnitureObj = CurrentFurniture)
 		SceneEndProcedures()
 	endif
 EndFunction
@@ -93,40 +93,16 @@ Event onUpdate()
 	if !ONpc.TravelToLocation
 		StartScene()
 	else
-		Invite()
-
-		int stuckTimer = 0
-
-		while CheckActorsStillLoaded() && DomActor.getdistance(SubActor) > 128
-			utility.wait(1)
-			stuckTimer += 1
-
-			OSexIntegrationMain.Console("Actor " + DomActor.GetActorBase().GetName() + " is travelling to " + SubActor.GetActorBase().GetName())
-
-			if stuckTimer >= 20
-				DomActor.setposition(SubActor.x, SubActor.y, SubActor.z)
-			endif
-		endwhile
-
-		SubthreadPackages.ClearAliases(DomActor, SubActor, Nav1, Nav2, Target)
+		if !Invite()
+			SceneEndProcedures()
+			return
+		endif
 
 		if CurrentFurniture != none
-			SubthreadPackages.TravelToFurniture(DomActor, SubActor, CurrentFurniture, Nav1, Nav2, Target)
-
-			stucktimer = 0
-
-			while CheckActorsStillLoaded() && (DomActor.getdistance(CurrentFurniture) > 160) || (SubActor.getdistance(CurrentFurniture) > 160)
-				utility.wait(1)
-				stucktimer += 1
-				OSexIntegrationMain.Console("Actor " + DomActor.GetActorBase().GetName() + " is travelling to Furniture")
-
-				if stucktimer >= 20
-					DomActor.setposition(CurrentFurniture.x, CurrentFurniture.y, CurrentFurniture.z)
-					SubActor.setposition(CurrentFurniture.x, CurrentFurniture.y, CurrentFurniture.z)
-				endif
-			endwhile
-
-			SubthreadPackages.ClearAliases(DomActor, SubActor, Nav1, Nav2, Target)
+			if !GoToFurniture()
+				SceneEndProcedures()
+				return
+			endif
 		endif
 
 		if ONPC.StopWhenFound && isFound()
@@ -140,10 +116,12 @@ EndEvent
 
 
 Function SceneEndProcedures()
+	SubthreadPackages.ClearAliases(DomActor, SubActor, Nav1, Nav2, Target)
+
 	UnregisterForModEvent("ostim_subthread_start")
 	UnregisterForModEvent("ostim_subthread_end")
 
-	OSexIntegrationMain.Console("Running scene end procedures")
+	ONpcMain.PrintToConsole("Running scene end procedures")
 
 	JArray.EraseForm(ONpc.NPCsInScene, DomActor)
 	JArray.EraseForm(ONpc.NPCsInScene, SubActor)
@@ -151,22 +129,88 @@ Function SceneEndProcedures()
 
 	JArray.EraseForm(ONpc.FurnituresInUse, CurrentFurniture)
 
-	SubthreadPackages.ClearAliases(DomActor, SubActor, Nav1, Nav2, Target)
-
 	ONpcThreadInUse = false
 	ONpc.activeScenes -= 1
 EndFunction
 
 
-Function Invite()
+bool Function Invite()
 	SubthreadPackages.TravelToActor(DomActor, SubActor, Nav1, Nav2, Target)
 	DomActor.SetLookAt(SubActor)
 	SubActor.SetLookAt(DomActor)
+
+	int stuckTimer = 0
+
+	while DomActor.GetDistance(SubActor) > 128
+		if !CheckActorsStillValid()
+			return false
+		endif
+
+		stuckTimer += 1
+
+		ONpcMain.PrintToConsole("Actor " + DomActor.GetActorBase().GetName() + " is travelling to " + SubActor.GetActorBase().GetName())
+
+		if stuckTimer >= 20
+			DomActor.setposition(SubActor.x, SubActor.y, SubActor.z)
+		else
+			utility.wait(1)
+		endif
+	endwhile
+
+	SubthreadPackages.ClearAliases(DomActor, SubActor, Nav1, Nav2, Target)
+
+	return true
+EndFunction
+
+
+bool Function GoToFurniture()
+	SubthreadPackages.TravelToFurniture(DomActor, SubActor, CurrentFurniture, Nav1, Nav2, Target)
+
+	int stuckTimer = 0
+
+	while DomActor.GetDistance(CurrentFurniture) > 128 && SubActor.GetDistance(CurrentFurniture) > 128
+		if !CheckActorsStillValid()
+			return false
+		endif
+
+		stucktimer += 1
+		ONpcMain.PrintToConsole("Actor " + DomActor.GetActorBase().GetName() + " is travelling to Furniture")
+
+		if stucktimer >= 20
+			DomActor.setposition(CurrentFurniture.x, CurrentFurniture.y, CurrentFurniture.z)
+			SubActor.setposition(CurrentFurniture.x, CurrentFurniture.y, CurrentFurniture.z)
+		else
+			utility.wait(1)
+		endif
+	endwhile
+
+	SubthreadPackages.ClearAliases(DomActor, SubActor, Nav1, Nav2, Target)
+
+	return true
 EndFunction
 
 
 bool Function CheckActorsStillLoaded()
 	return DomActor.Is3DLoaded() && SubActor.Is3DLoaded() && (!ThirdActor || (ThirdActor && !ThirdActor.Is3DLoaded()))
+EndFunction
+
+
+bool Function CheckActorsStillAlive()
+	return !DomActor.IsDead() && !SubActor.IsDead() && (!ThirdActor || (ThirdActor && !ThirdActor.IsDead()))
+EndFunction
+
+
+bool Function CheckActorsNotInScenes()
+	return DomActor.GetCurrentScene() == None && SubActor.GetCurrentScene() == None && (!ThirdActor || (ThirdActor && ThirdActor.GetCurrentScene() == None))
+EndFunction
+
+bool Function CheckActorsAreInCombatState()
+	return ONpc.ActorIsInCombatState(DomActor) || ONpc.ActorIsInCombatState(SubActor) || (ThirdActor && ONpc.ActorIsInCombatState(ThirdActor))
+EndFunction
+
+
+bool Function CheckActorsStillValid()
+	return CheckActorsStillLoaded() && CheckActorsStillAlive() && CheckActorsNotInScenes() && !CheckActorsAreInCombatState()
 EndFunction
 
 

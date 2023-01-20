@@ -64,27 +64,10 @@ function StartScene()
 			OStim.StartScene(actorsForScene[0], actorsForScene[1], zThirdActor = actorsForScene[2])
 		endif
 	else
-		; we must reorder actors properly for NPC scenes
-		actor domActor = actorsForScene[0]
-		actor subActor = actorsForScene[1]
-		actor thirdActor
-
-		If (OStim.AppearsFemale(domActor) && !OStim.AppearsFemale(subActor))
-			domActor = actorsForScene[1]
-			subActor = actorsForScene[0]
-		EndIf
-	
-		If actorsForScene.Length == 3
-			If OStim.AppearsFemale(DomActor) && !OStim.AppearsFemale(actorsForScene[2])
-				thirdActor = domActor
-				domActor = actorsForScene[2]
-			EndIf
-		EndIf
-
 		if actorsForScene.Length == 2
-			OStim.GetUnusedSubthread().StartSubthreadScene(domActor, subActor)
+			OStim.GetUnusedSubthread().StartSubthreadScene(actorsForScene[0], actorsForScene[1])
 		elseif actorsForScene.Length == 3
-			OStim.GetUnusedSubthread().StartSubthreadScene(domActor, subActor, zThirdActor = thirdActor)
+			OStim.GetUnusedSubthread().StartSubthreadScene(actorsForScene[0], actorsForScene[1], zThirdActor = actorsForScene[2])
 		endif
 	endif
 

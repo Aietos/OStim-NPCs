@@ -29,6 +29,7 @@ int setFollowersNoScenesDungeons
 int setNoScenesInTowns
 int setNoScenesInGuilds
 int setNoScenesInInns
+int setAllowElderRace
 
 int setResetDefaults
 
@@ -56,6 +57,7 @@ event OnPageReset(string page)
 	AddEmptyOption()
 
 	setAllowActiveFollowers = AddToggleOption("$onpcs_option_allow_active_followers", ONpc.AllowActiveFollowers)
+	setAllowElderRace = AddToggleOption("$onpcs_option_allow_elders", ONpc.AllowElderRace)
 	setAllowCommonEnemies = AddToggleOption("$onpcs_option_allow_common_enemies", ONpc.AllowCommonEnemies)
 	AddEmptyOption()
 
@@ -111,6 +113,10 @@ event OnOptionSelect(int option)
 	elseif (option == setAllowActiveFollowers)
 		ONpc.AllowActiveFollowers = !ONpc.AllowActiveFollowers
 		SetToggleOptionValue(setAllowActiveFollowers, ONpc.AllowActiveFollowers)
+
+	elseif (option == setAllowElderRace)
+		ONpc.AllowElderRace = !ONpc.AllowElderRace
+		SetToggleOptionValue(setAllowElderRace, ONpc.AllowElderRace)
 
 	elseif (option == setAllowCommonEnemies)
 		ONpc.AllowCommonEnemies = !ONpc.AllowCommonEnemies
@@ -221,12 +227,18 @@ event OnOptionSliderAccept(int option, float value)
 		SetSliderOptionValue(setMaxScenes, value, "{0}")
 
 	elseif (option == setMinRelation)
-	ONpc.MinRelation = value as int
-	SetSliderOptionValue(setMinRelation, value, "{0}")
+		ONpc.MinRelation = value as int
+		SetSliderOptionValue(setMinRelation, value, "{0}")
 
 	elseif (option == setMinNight)
+		bool isNightTime = ONpc.IsNight()
+
 		ONpc.MinNight = (value+12) as int
 		SetSliderOptionValue(setMinNight, value, "{0} PM")
+
+		if !isNightTime
+			ONpc.RestartScanning()
+		endif
 
 	elseif (option == setMaxNight)
 		ONpc.MaxNight = value as int
@@ -261,6 +273,9 @@ event OnOptionHighlight(int option)
 
 	elseif (option == setAllowActiveFollowers)
 		SetInfoText("$onpcs_highlight_allow_active_followers")
+
+	elseif (option == setAllowElderRace)
+		SetInfoText("$onpcs_highlight_allow_elders")
 
 	elseif (option == setAllowCommonEnemies)
 		SetInfoText("$onpcs_highlight_allow_common_enemies")
@@ -344,6 +359,9 @@ function ResetDefaults()
 
 	ONpc.AllowActiveFollowers = true
 	SetToggleOptionValue(setAllowActiveFollowers, ONpc.AllowActiveFollowers)
+
+	ONpc.AllowElderRace = false
+	SetToggleOptionValue(setAllowElderRace, ONpc.AllowElderRace)
 
 	ONpc.AllowCommonEnemies = true
 	SetToggleOptionValue(setAllowCommonEnemies, ONpc.AllowCommonEnemies)
