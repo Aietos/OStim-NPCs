@@ -2,13 +2,15 @@ scriptname ONpcMMSpellAliasScript extends ReferenceAlias
 
 actor[] actorsForScene
 
+Actor property PlayerRef auto
+
+Spell property MatchMakerSpellTarget auto
+Spell property MatchMakerSpellSelf auto
+
+OSexIntegrationMain property OStim auto
+
 
 event OnInit()
-	OnPlayerLoadGame()
-endEvent
-
-
-event OnPlayerLoadGame()
 	if !PlayerRef.HasSpell(MatchMakerSpellTarget)
 		PlayerRef.AddSpell(MatchMakerSpellTarget, true)
 	endIf
@@ -16,6 +18,11 @@ event OnPlayerLoadGame()
 		PlayerRef.AddSpell(MatchMakerSpellSelf, true)
 	endIf
 
+	OnPlayerLoadGame()
+endEvent
+
+
+event OnPlayerLoadGame()
 	OStim = OUtils.GetOStim()
 	actorsForScene = PapyrusUtil.ResizeActorArray(actorsForScene, 0)
 endEvent
@@ -73,11 +80,3 @@ function StartScene()
 
 	actorsForScene = PapyrusUtil.ResizeActorArray(actorsForScene, 0)
 endFunction
-
-
-Actor property PlayerRef auto
-
-Spell property MatchMakerSpellTarget auto
-Spell property MatchMakerSpellSelf auto
-
-OSexIntegrationMain property OStim auto

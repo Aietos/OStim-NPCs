@@ -77,6 +77,8 @@ int property NPCsInScene auto
 int property FurnituresInUse auto
 int property NPCsHadSexThisNight auto
 
+bool JArraysCreated
+bool ORomanceInstalled
 bool OPrivacyInstalled
 
 Faction OPFollowFaction
@@ -91,18 +93,17 @@ Package OPApproachCoralyn
 Package OPCoraApproachFollower
 
 
+; ███████╗██╗   ██╗███████╗███╗   ██╗████████╗███████╗
+; ██╔════╝██║   ██║██╔════╝████╗  ██║╚══██╔══╝██╔════╝
+; █████╗  ██║   ██║█████╗  ██╔██╗ ██║   ██║   ███████╗
+; ██╔══╝  ╚██╗ ██╔╝██╔══╝  ██║╚██╗██║   ██║   ╚════██║
+; ███████╗ ╚████╔╝ ███████╗██║ ╚████║   ██║   ███████║
+; ╚══════╝  ╚═══╝  ╚══════╝╚═╝  ╚═══╝   ╚═╝   ╚══════╝
+
+
 Event OnInit()
 	OStim = OUtils.GetOStim()
-	ONpcSubthreadQuest = Game.GetFormFromFile(0x000814, "ONPCs.esp") as Quest
-
-	NPCsInScene = JArray.object()
-	JValue.retain(NPCsInScene, "npcsInScene")
-
-	FurnituresInUse = JArray.object()
-	JValue.retain(FurnituresInUse, "furnituresInUse")
-
-	NPCsHadSexThisNight = JArray.object()
-	JValue.retain(NPCsHadSexThisNight, "npcsHadSexThisNight")
+	ONpcSubthreadQuest = Game.GetFormFromFile(0x000814, "OStimNPCs.esp") as Quest
 
 	OnLoad()
 EndEvent
@@ -112,6 +113,7 @@ Function OnLoad()
 	Scanning = false
 	ActiveScenes = 0
 
+	ORomanceInstalled = Game.IsPluginInstalled("ORomance.esp")
 	OPrivacyInstalled = Game.IsPluginInstalled("OPrivacy.esp")
 
 	if (OPrivacyInstalled)
@@ -137,6 +139,10 @@ Event OnUpdate()
 	if !ONpcDisabled
 
 		bool isNightTime = IsNight()
+
+		if isNightTime && !JArraysCreated
+			CreateJArrays()
+		endif
 	
 		if !Scanning && isNightTime && !PlayerRef.IsInCombat() && ActiveScenes < MaxScenes && LocationIsValid()
 			PrintToConsole("scanning!")
@@ -156,6 +162,11 @@ Event OnUpdate()
 			RegisterForSingleUpdate(scanfreq)
 		else
 			PrintToConsole("Is not night...")
+
+			if JArraysCreated
+				ClearJArrays()
+			endif
+
 			RegisterForSingleUpdateGameTime(GetTimeUntilNight())
 		endif
 	endif
@@ -164,9 +175,16 @@ EndEvent
 
 Event OnUpdateGameTime()
 	PrintToConsole("Night has fallen....")
-	JArray.Clear(NPCsHadSexThisNight)
 	RegisterForSingleUpdate(scanfreq)
 EndEvent
+
+
+; ███████╗ ██████╗ █████╗ ███╗   ██╗███╗   ██╗██╗███╗   ██╗ ██████╗ 
+; ██╔════╝██╔════╝██╔══██╗████╗  ██║████╗  ██║██║████╗  ██║██╔════╝ 
+; ███████╗██║     ███████║██╔██╗ ██║██╔██╗ ██║██║██╔██╗ ██║██║  ███╗
+; ╚════██║██║     ██╔══██║██║╚██╗██║██║╚██╗██║██║██║╚██╗██║██║   ██║
+; ███████║╚██████╗██║  ██║██║ ╚████║██║ ╚████║██║██║ ╚████║╚██████╔╝
+; ╚══════╝ ╚═════╝╚═╝  ╚═╝╚═╝  ╚═══╝╚═╝  ╚═══╝╚═╝╚═╝  ╚═══╝ ╚═════╝ 
 
 
 Function Scan(ONpcSubthread SubthreadToUse)
@@ -176,8 +194,11 @@ Function Scan(ONpcSubthread SubthreadToUse)
 	PrintToConsole("Scan radius is " + ScanRadius)
 	GetSurroundingActors()
 	PrintToConsole("Actors length is " + Actors.length)
+	PrintToConsole("ActorsMale length is " + ActorsMale.length)
+	PrintToConsole("ActorsFemale length is " + ActorsFemale.length)
 
 	if !Actors.length
+		Scanning = false
 		return
 	endif
 
@@ -191,6 +212,7 @@ Function Scan(ONpcSubthread SubthreadToUse)
 
 	if SexType == "mf" || SexType == "threesome"
 		if !ActorsMale.length || !ActorsFemale.length
+			Scanning = false
 			return
 		endif
 
@@ -201,6 +223,7 @@ Function Scan(ONpcSubthread SubthreadToUse)
 		endif
 	elseif SexType == "ff"
 		if ActorsFemale.length < 2
+			Scanning = false
 			return
 		endif
 
@@ -211,6 +234,7 @@ Function Scan(ONpcSubthread SubthreadToUse)
 		endif
 	else
 		if ActorsMale.length < 2
+			Scanning = false
 			return
 		endif
 
@@ -229,9 +253,25 @@ Function Scan(ONpcSubthread SubthreadToUse)
 	if Dom.Is3DLoaded() && Sub.Is3DLoaded() && (!Third || Third.Is3DLoaded())
 		PrintToConsole("starting scene setup")
 
+		bool alternativeBedSearch
+
+		; If either actor is sleeping, we use an alternate bed search
+		; Since the normal one will not find the bed they're sleeping on
+		; We then use the bed the actor was sleeping on to prevent them from clipping into the bed
+		if Dom.GetSleepState() != 0 || Sub.GetSleepState() != 0
+			alternativeBedSearch = true
+		endif
+
 		ObjectReference furnitureRef
 
-		if OStim.useFurniture
+		if alternativeBedSearch
+			furnitureRef = FindEmptyBed(Dom)
+
+			if !furnitureRef
+				Scanning = false
+				return
+			endif
+		elseif OStim.useFurniture
 			furnitureRef = FindEmptyFurniture(Dom)
 
 			if OnlyAllowScenesInBeds && !furnitureRef
@@ -249,7 +289,7 @@ Function Scan(ONpcSubthread SubthreadToUse)
 			JArray.addForm(NPCsInScene, third)
 		endif
 
-		SubthreadToUse.SetupScene(Dom, Sub, furnitureRef, None)
+		SubthreadToUse.SetupScene(Dom, Sub, furnitureRef, alternativeBedSearch, None)
 		Scanning = false
 	else
 		PrintToConsole("They were not loaded")
@@ -283,7 +323,7 @@ Function GetSurroundingActors()
 		currentActor = Actors[i]
 
 		if ActorIsValid(currentActor)
-			if currentActor.GetActorBase().GetSex() == 1
+			if OStim.AppearsFemale(currentActor)
 				ActorsFemale[femaleIndex] = currentActor
 				femaleIndex += 1
 			else
@@ -346,19 +386,13 @@ Actor Function GetPartnerForActor(Actor act, Actor[] ActorsArrayToUse)
 		isValid = true
 		currentActor = ActorsArrayToUse[i]
 
-		if !AllowActiveFollowers && currentActor.IsPlayerTeamMate()
-			isValid = False
-		elseif AllowActiveFollowers && currentActor.IsPlayerTeamMate() && FollowersNoScenesDungeons && IsDungeon(PlayerRef.GetCurrentLocation())
-			isValid = False
-		elseif currentActor.HasAssociation(ParentChild, act) || currentActor.HasAssociation(Siblings, act) || currentActor.HasAssociation(Cousins, act)
+		if currentActor.HasAssociation(ParentChild, act) || currentActor.HasAssociation(Siblings, act) || currentActor.HasAssociation(Cousins, act)
 			isValid = False
 		elseif isActCourting && !act.HasAssociation(Courting, currentActor)
 			isValid = False
 		elseif isActMarried && !act.HasAssociation(Spouse, currentActor)
 			isValid = False
 		elseif (isEnemy(act) && !isEnemy(currentActor)) || (!isEnemy(act) && isEnemy(currentActor))
-			isValid = False
-		elseif !AllowCommonEnemies && (isEnemy(act) || isEnemy(currentActor))
 			isValid = False
 		else
 			if AllowCommonEnemies && isEnemy(act) && isEnemy(currentActor)
@@ -381,8 +415,8 @@ Actor Function GetPartnerForActor(Actor act, Actor[] ActorsArrayToUse)
 EndFunction
 
 
-ObjectReference Function FindEmptyFurniture(actor dom)
-	ObjectReference[] Furnitures = OFurniture.FindFurniture(2, dom, (OStim.FurnitureSearchDistance + 1) * 100.0, 96)
+ObjectReference Function FindEmptyFurniture(Actor Dom)
+	ObjectReference[] Furnitures = OFurniture.FindFurniture(2, Dom, (OStim.FurnitureSearchDistance + 1) * 100.0, 96)
 
 	int i = Furnitures.Length
 
@@ -411,47 +445,35 @@ ObjectReference Function FindEmptyFurniture(actor dom)
 EndFunction
 
 
-ONpcSubthread Function GetUnusedSubthread()
-	int i = 0
-	int max = 4
+ObjectReference Function FindEmptyBed(Actor Dom)
+	ObjectReference[] Beds = OSANative.FindBed(Dom, (OStim.FurnitureSearchDistance + 1) * 100.0, 96.0)
 
-	while i < max 
-		ONpcSubthread thread = ONpcSubthreadQuest.GetNthAlias(i) as ONpcSubthread
+	Int i = Beds.Length
 
-		if thread && !thread.IsThreadInUse()
-			return thread
+	While i > 0
+		i -= 1
+
+		ObjectReference Bed = Beds[i]
+
+		if JArray.FindForm(FurnituresInUse, Bed) == -1
+			return Bed
 		endif
+	EndWhile
 
-		i += 1
-	endwhile
+	Return None
 EndFunction
 
 
-Bool Function LocationIsValid()
-	Location playerLocation = PlayerRef.GetCurrentLocation()
-
-	if !playerLocation
-		return true
-	endif
-
-	if NoScenesInTowns && IsSettlement(playerLocation)
-		return false
-	endif
-
-	if NoScenesInGuilds && IsGuild(playerLocation)
-		return false
-	endif
-
-	if NoScenesInInns && IsInn(playerLocation)
-		return false
-	endif
-
-	return true
-EndFunction
+;  █████╗  ██████╗████████╗ ██████╗ ██████╗     ██╗   ██╗████████╗██╗██╗     ███████╗
+; ██╔══██╗██╔════╝╚══██╔══╝██╔═══██╗██╔══██╗    ██║   ██║╚══██╔══╝██║██║     ██╔════╝
+; ███████║██║        ██║   ██║   ██║██████╔╝    ██║   ██║   ██║   ██║██║     ███████╗
+; ██╔══██║██║        ██║   ██║   ██║██╔══██╗    ██║   ██║   ██║   ██║██║     ╚════██║
+; ██║  ██║╚██████╗   ██║   ╚██████╔╝██║  ██║    ╚██████╔╝   ██║   ██║███████╗███████║
+; ╚═╝  ╚═╝ ╚═════╝   ╚═╝    ╚═════╝ ╚═╝  ╚═╝     ╚═════╝    ╚═╝   ╚═╝╚══════╝╚══════╝
 
 
 Bool Function ActorIsValid(Actor Act)
-	if IsInvalidNpc(Act) || ActorIsInCombatState(Act) || Act.GetCurrentScene() != None || !Act.Is3DLoaded() || Act.IsInDialogueWithPlayer() || OStim.IsActorActive(Act) || IsInJArrays(Act) || ActorHasOPrivacyPackage(Act)
+	if IsInvalidNpc(Act) || IsPlayerORomancePartner(Act) || ActorIsInCombatState(Act) || Act.GetCurrentScene() != None || !Act.Is3DLoaded() || Act.IsInDialogueWithPlayer() || OStim.IsActorActive(Act) || IsInJArrays(Act) || ActorHasOPrivacyPackage(Act)
 		return false
 	endif
 
@@ -460,12 +482,42 @@ EndFunction
 
 
 Bool Function ActorIsInCombatState(Actor Act)
-	return Act.GetCombatState() || Act.IsBleedingOut() || Act.IsWeaponDrawn() || Act.IsUnconscious() || Act.IsInKillMove() || Act.IsArrested() || Act.IsCommandedActor() || Act.IsOnMount()
+	return Act.GetCombatState() != 0 || Act.IsBleedingOut() || Act.IsWeaponDrawn() || Act.IsUnconscious() || Act.IsInKillMove() || Act.IsArrested() || Act.IsCommandedActor() || Act.IsOnMount()
 EndFunction
 
 
 Bool Function IsInvalidNpc(Actor Act)
-	return !Act || Act == PlayerRef || Act.IsDead() || Act.isDisabled() || Act.IsChild() || !Act.HasKeywordString("ActorTypeNPC") || Act.isGhost() || (Act.GetRace() == ElderRace && !AllowElderRace)
+	return !Act || Act == PlayerRef || Act.IsDead() || Act.isDisabled() || Act.IsChild() || !Act.HasKeywordString("ActorTypeNPC") || Act.isGhost() || IsInvalidNpcUserPreferences(Act)
+EndFunction
+
+
+Bool Function IsInvalidNpcUserPreferences(Actor Act)
+	if Act.GetRace() == ElderRace && !AllowElderRace
+		return true
+	endif
+
+	if !AllowActiveFollowers && Act.IsPlayerTeamMate()
+		return true
+	endif
+
+	if AllowActiveFollowers && Act.IsPlayerTeamMate() && FollowersNoScenesDungeons && IsDungeon(PlayerRef.GetCurrentLocation())
+		return true
+	endif
+
+	if !AllowCommonEnemies && isEnemy(Act)
+		return true
+	endif
+
+	return false
+EndFunction
+
+
+Bool Function IsPlayerORomancePartner(Actor Act)
+	if !ORomanceInstalled
+		return false 
+	endif 
+
+	return StorageUtil.GetIntValue(Act, "or_k_part", -1) == 1
 EndFunction
 
 
@@ -512,6 +564,14 @@ Bool Function InvitePlayer()
 EndFunction
 
 
+; ██╗      ██████╗  ██████╗ █████╗ ████████╗██╗ ██████╗ ███╗   ██╗    ██╗   ██╗████████╗██╗██╗     ███████╗
+; ██║     ██╔═══██╗██╔════╝██╔══██╗╚══██╔══╝██║██╔═══██╗████╗  ██║    ██║   ██║╚══██╔══╝██║██║     ██╔════╝
+; ██║     ██║   ██║██║     ███████║   ██║   ██║██║   ██║██╔██╗ ██║    ██║   ██║   ██║   ██║██║     ███████╗
+; ██║     ██║   ██║██║     ██╔══██║   ██║   ██║██║   ██║██║╚██╗██║    ██║   ██║   ██║   ██║██║     ╚════██║
+; ███████╗╚██████╔╝╚██████╗██║  ██║   ██║   ██║╚██████╔╝██║ ╚████║    ╚██████╔╝   ██║   ██║███████╗███████║
+; ╚══════╝ ╚═════╝  ╚═════╝╚═╝  ╚═╝   ╚═╝   ╚═╝ ╚═════╝ ╚═╝  ╚═══╝     ╚═════╝    ╚═╝   ╚═╝╚══════╝╚══════╝
+
+
 Bool Function IsSettlement(Location Loc)
 	return Loc.HasKeyword(LocTypeTown) || Loc.HasKeyword(LocTypeCity) || Loc.HasKeyword(LocTypeSettlement)
 EndFunction
@@ -530,6 +590,37 @@ EndFunction
 Bool Function IsDungeon(Location Loc)
 	return Loc.HasKeyword(LocTypeDungeon)
 EndFunction
+
+
+Bool Function LocationIsValid()
+	Location playerLocation = PlayerRef.GetCurrentLocation()
+
+	if !playerLocation
+		return true
+	endif
+
+	if NoScenesInTowns && IsSettlement(playerLocation)
+		return false
+	endif
+
+	if NoScenesInGuilds && IsGuild(playerLocation)
+		return false
+	endif
+
+	if NoScenesInInns && IsInn(playerLocation)
+		return false
+	endif
+
+	return true
+EndFunction
+
+
+; ███╗   ██╗██╗ ██████╗ ██╗  ██╗████████╗    ██╗   ██╗████████╗██╗██╗     ███████╗
+; ████╗  ██║██║██╔════╝ ██║  ██║╚══██╔══╝    ██║   ██║╚══██╔══╝██║██║     ██╔════╝
+; ██╔██╗ ██║██║██║  ███╗███████║   ██║       ██║   ██║   ██║   ██║██║     ███████╗
+; ██║╚██╗██║██║██║   ██║██╔══██║   ██║       ██║   ██║   ██║   ██║██║     ╚════██║
+; ██║ ╚████║██║╚██████╔╝██║  ██║   ██║       ╚██████╔╝   ██║   ██║███████╗███████║
+; ╚═╝  ╚═══╝╚═╝ ╚═════╝ ╚═╝  ╚═╝   ╚═╝        ╚═════╝    ╚═╝   ╚═╝╚══════╝╚══════╝
 
 
 Bool Function IsNight()
@@ -564,13 +655,66 @@ Float Function GetTimeUntilNight()
 EndFunction
 
 
+;  ██████╗ ███████╗███╗   ██╗███████╗██████╗  █████╗ ██╗         ██╗   ██╗████████╗██╗██╗     ███████╗
+; ██╔════╝ ██╔════╝████╗  ██║██╔════╝██╔══██╗██╔══██╗██║         ██║   ██║╚══██╔══╝██║██║     ██╔════╝
+; ██║  ███╗█████╗  ██╔██╗ ██║█████╗  ██████╔╝███████║██║         ██║   ██║   ██║   ██║██║     ███████╗
+; ██║   ██║██╔══╝  ██║╚██╗██║██╔══╝  ██╔══██╗██╔══██║██║         ██║   ██║   ██║   ██║██║     ╚════██║
+; ╚██████╔╝███████╗██║ ╚████║███████╗██║  ██║██║  ██║███████╗    ╚██████╔╝   ██║   ██║███████╗███████║
+;  ╚═════╝ ╚══════╝╚═╝  ╚═══╝╚══════╝╚═╝  ╚═╝╚═╝  ╚═╝╚══════╝     ╚═════╝    ╚═╝   ╚═╝╚══════╝╚══════╝
+
+
+Function PrintToConsole(String In) Global
+	MiscUtil.PrintConsole("OStim NPCs: " + In)
+EndFunction
+
+
 Function RestartScanning()
 	RegisterForSingleUpdate(ScanFreq)
 EndFunction
 
 
-Function PrintToConsole(String In) Global
-	MiscUtil.PrintConsole("OStim NPCs: " + In)
+ONpcSubthread Function GetUnusedSubthread()
+	int i = 0
+	int max = 4
+
+	while i < max 
+		ONpcSubthread thread = ONpcSubthreadQuest.GetNthAlias(i) as ONpcSubthread
+
+		if thread && !thread.IsThreadInUse()
+			return thread
+		endif
+
+		i += 1
+	endwhile
+EndFunction
+
+
+Function CreateJArrays()
+	ClearJArrays()
+
+	NPCsInScene = JArray.object()
+	JValue.retain(NPCsInScene, "npcsInScene")
+
+	FurnituresInUse = JArray.object()
+	JValue.retain(FurnituresInUse, "furnituresInUse")
+
+	NPCsHadSexThisNight = JArray.object()
+	JValue.retain(NPCsHadSexThisNight, "npcsHadSexThisNight")
+
+	JArraysCreated = true
+EndFunction
+
+
+Function ClearJArrays()
+	JArray.Clear(NPCsInScene)
+	JArray.Clear(NPCsHadSexThisNight)
+	JArray.Clear(FurnituresInUse)
+
+	JValue.release(NPCsInScene)
+	JValue.release(NPCsHadSexThisNight)
+	JValue.release(FurnituresInUse)
+
+	JArraysCreated = false
 EndFunction
 
 

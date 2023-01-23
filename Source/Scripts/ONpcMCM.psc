@@ -32,8 +32,15 @@ int setNoScenesInInns
 int setAllowElderRace
 
 int setResetDefaults
+int setAddSpells
+int setRemoveSpells
 
 ONpcMain property ONpc auto
+
+Spell property MatchMakerSpellTarget auto
+Spell property MatchMakerSpellSelf auto
+
+Actor property PlayerRef auto
 
 
 event OnInit()
@@ -77,6 +84,8 @@ event OnPageReset(string page)
 
 	AddColoredHeader("$onpcs_header_reset")
 	setResetDefaults = AddToggleOption("$onpcs_option_reset_defaults", false)
+	setAddSpells = AddToggleOption("$onpcs_option_add_spells", false)
+	setRemoveSpells = AddToggleOption("$onpcs_option_remove_spells", false)
 
 	SetCursorPosition(1)
 
@@ -91,7 +100,7 @@ event OnPageReset(string page)
 	AddEmptyOption()
 
 	setScanFreq = AddSliderOption("$onpcs_option_scan_freq", ONpc.ScanFreq, "{0} seconds")
-	setScanRadius = AddSliderOption("$onpcs_option_scan_radius", ONpc.ScanRadius * 0.046875, "{0} feet")
+	setScanRadius = AddSliderOption("$onpcs_option_scan_radius", ONpc.ScanRadius * 0.01428, "{0} meters")
 
 	AddEmptyOption()
 
@@ -157,6 +166,22 @@ event OnOptionSelect(int option)
 	elseif (option == setResetDefaults)
 		ResetDefaults()
 		ShowMessage("$onpcs_message_defaults_reset", false)
+	elseif (option == setAddSpells)
+		if !PlayerRef.HasSpell(MatchMakerSpellTarget)
+			PlayerRef.AddSpell(MatchMakerSpellTarget, true)
+		endIf
+		if !PlayerRef.HasSpell(MatchMakerSpellSelf)
+			PlayerRef.AddSpell(MatchMakerSpellSelf, true)
+		endIf
+		ShowMessage("$onpcs_message_spells_added", false)
+	elseif (option == setRemoveSpells)
+		if PlayerRef.HasSpell(MatchMakerSpellTarget)
+			PlayerRef.RemoveSpell(MatchMakerSpellTarget)
+		endIf
+		if PlayerRef.HasSpell(MatchMakerSpellSelf)
+			PlayerRef.RemoveSpell(MatchMakerSpellSelf)
+		endIf
+		ShowMessage("$onpcs_message_spells_removed", false)
 	endIf
 endEvent
 
@@ -195,10 +220,10 @@ event OnOptionSliderOpen(int option)
 		SetSliderDialogInterval(5)
 
 	elseif (option == setScanRadius)
-		SetSliderDialogStartValue(ONpc.ScanRadius * 0.046875)
-		SetSliderDialogDefaultValue(48.0)
-		SetSliderDialogRange(2, 200)
-		SetSliderDialogInterval(2)
+		SetSliderDialogStartValue(ONpc.ScanRadius * 0.01428)
+		SetSliderDialogDefaultValue(100.0)
+		SetSliderDialogRange(20, 300)
+		SetSliderDialogInterval(5)
 
 	elseif (option == setWeightMF)
 		SetSliderDialogStartValue(ONpc.WeightMF)
@@ -246,11 +271,11 @@ event OnOptionSliderAccept(int option, float value)
 
 	elseif (option == setScanFreq)
 		ONpc.ScanFreq = value as int
-		SetSliderOptionValue(setScanFreq, value, "{0}")
+		SetSliderOptionValue(setScanFreq, value, "{0} seconds")
 
 	elseif (option == setScanRadius)
-		ONpc.ScanRadius = value / 0.046875
-		SetSliderOptionValue(setScanRadius, value, "{0}")
+		ONpc.ScanRadius = value / 0.01428
+		SetSliderOptionValue(setScanRadius, value, "{0} meters")
 
 	elseif (option == setWeightMF)
 		ONpc.WeightMF = value as int
@@ -375,7 +400,7 @@ function ResetDefaults()
 	ONpc.FurnitureOnlyBeds = true
 	SetToggleOptionValue(setFurnitureOnlyBeds, ONpc.FurnitureOnlyBeds)
 
-	ONpc.OnlyAllowScenesInBeds = true
+	ONpc.OnlyAllowScenesInBeds = false
 	SetToggleOptionValue(setOnlyAllowScenesInBeds, ONpc.OnlyAllowScenesInBeds)
 
 	ONpc.FollowersNoScenesDungeons = true
@@ -384,7 +409,7 @@ function ResetDefaults()
 	ONpc.NoScenesInTowns = true
 	SetToggleOptionValue(setNoScenesInTowns, ONpc.NoScenesInTowns)
 
-	ONpc.NoScenesInGuilds = false
+	ONpc.NoScenesInGuilds = true
 	SetToggleOptionValue(setNoScenesInGuilds, ONpc.NoScenesInGuilds)
 
 	ONpc.NoScenesInInns = false
@@ -403,10 +428,10 @@ function ResetDefaults()
 	SetSliderOptionValue(setMaxNight, 4.0, "{0} AM")
 
 	ONpc.ScanFreq = 10
-	SetSliderOptionValue(setScanFreq, 10.0, "{0}")
+	SetSliderOptionValue(setScanFreq, 10.0, "{0} seconds")
 
-	ONpc.ScanRadius = 48.0 / 0.046875
-	SetSliderOptionValue(setScanRadius, 48.0, "{0}")
+	ONpc.ScanRadius = 100.0 / 0.01428
+	SetSliderOptionValue(setScanRadius, 100, "{0} meters")
 
 	ONpc.WeightMF = 100
 	SetSliderOptionValue(setWeightMF, 100.0, "{0}")

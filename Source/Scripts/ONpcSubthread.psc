@@ -7,6 +7,8 @@ Actor DomActor
 Actor SubActor
 Actor ThirdActor
 
+bool AlternativeBedSearchUsed
+
 ObjectReference CurrentFurniture
 
 OStimSubthread CurrentOStimSubthread
@@ -76,12 +78,14 @@ Function StartScene()
 EndFunction
 
 
-Function SetupScene(Actor dom, Actor sub, ObjectReference furnitureObj, Actor third = none)
+Function SetupScene(Actor dom, Actor sub, ObjectReference furnitureObj, bool alternativeBedSearch, Actor third = none)
 	ONpcThreadInUse = true
 
 	DomActor = dom
 	SubActor = sub
 	ThirdActor = third
+
+	AlternativeBedSearchUsed = alternativeBedSearch
 
 	CurrentFurniture = furnitureObj
 
@@ -91,6 +95,39 @@ EndFunction
 
 Event onUpdate()
 	if !ONpc.TravelToLocation
+		; If actors were sleeping, we must wake them up before initiating scene
+		; Some mods change the NPCs clothes when they go to sleep
+		; So if we start a scene without waking them up, OStim may fail to remove the clothes properly
+		if AlternativeBedSearchUsed
+			if DomActor.GetSleepState() != 0 || SubActor.GetSleepState() != 0
+				; This wakes up the actors
+				SubthreadPackages.PackageDoNothing(DomActor, SubActor, Nav1, Nav2)
+			endif
+
+			int numberLoops = 0
+
+			; now we wait for them to wake up
+			while DomActor.GetSleepState() != 0 || SubActor.GetSleepState() != 0
+				numberLoops += 1
+
+				if numberLoops >= 20
+					SceneEndProcedures()
+					return
+				endif
+
+				Utility.Wait(1)
+			endwhile
+
+			Utility.Wait(1.5)
+		endif
+
+		if CurrentFurniture != none
+			DomActor.setposition(CurrentFurniture.x, CurrentFurniture.y, CurrentFurniture.z)
+			SubActor.setposition(CurrentFurniture.x, CurrentFurniture.y, CurrentFurniture.z)
+		endif
+
+		SubthreadPackages.ClearAliases(DomActor, SubActor, Nav1, Nav2, Target)
+
 		StartScene()
 	else
 		if !Invite()
@@ -98,11 +135,16 @@ Event onUpdate()
 			return
 		endif
 
+		debug.sendanimationevent(DomActor, "IdleComeThisWay")
+
 		if CurrentFurniture != none
 			if !GoToFurniture()
 				SceneEndProcedures()
 				return
 			endif
+
+			DomActor.setposition(CurrentFurniture.x, CurrentFurniture.y, CurrentFurniture.z)
+			SubActor.setposition(CurrentFurniture.x, CurrentFurniture.y, CurrentFurniture.z)
 		endif
 
 		if ONPC.StopWhenFound && isFound()
@@ -143,6 +185,9 @@ bool Function Invite()
 
 	while DomActor.GetDistance(SubActor) > 128
 		if !CheckActorsStillValid()
+			DomActor.ClearLookAt()
+			SubActor.ClearLookAt()
+
 			return false
 		endif
 
@@ -150,7 +195,7 @@ bool Function Invite()
 
 		ONpcMain.PrintToConsole("Actor " + DomActor.GetActorBase().GetName() + " is travelling to " + SubActor.GetActorBase().GetName())
 
-		if stuckTimer >= 20
+		if stuckTimer >= 30
 			DomActor.setposition(SubActor.x, SubActor.y, SubActor.z)
 		else
 			utility.wait(1)
@@ -158,6 +203,9 @@ bool Function Invite()
 	endwhile
 
 	SubthreadPackages.ClearAliases(DomActor, SubActor, Nav1, Nav2, Target)
+
+	DomActor.ClearLookAt()
+	SubActor.ClearLookAt()
 
 	return true
 EndFunction
@@ -176,9 +224,8 @@ bool Function GoToFurniture()
 		stucktimer += 1
 		ONpcMain.PrintToConsole("Actor " + DomActor.GetActorBase().GetName() + " is travelling to Furniture")
 
-		if stucktimer >= 20
-			DomActor.setposition(CurrentFurniture.x, CurrentFurniture.y, CurrentFurniture.z)
-			SubActor.setposition(CurrentFurniture.x, CurrentFurniture.y, CurrentFurniture.z)
+		if stucktimer >= 30
+			return true
 		else
 			utility.wait(1)
 		endif
