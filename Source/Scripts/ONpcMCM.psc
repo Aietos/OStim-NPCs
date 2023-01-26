@@ -8,6 +8,7 @@ int setAllowCommonEnemies
 
 int setStopWhenFound
 int setTravelToLocation
+int setEnemiesTravelToLocation
 
 int setMaxScenes
 int setMaxEnemyScenesPerNight
@@ -71,6 +72,7 @@ event OnPageReset(string page)
 
 	setStopWhenFound = AddToggleOption("$onpcs_option_stop_when_found", ONpc.StopWhenFound)
 	setTravelToLocation = AddToggleOption("$onpcs_option_travel", ONpc.TravelToLocation)
+	setEnemiesTravelToLocation = AddToggleOption("$onpcs_option_travel_enemies", ONpc.EnemiesTravelToLocation)
 	AddEmptyOption()
 
 	setFurnitureOnlyBeds = AddToggleOption("$onpcs_option_furniture_beds", ONpc.FurnitureOnlyBeds)
@@ -142,6 +144,10 @@ event OnOptionSelect(int option)
 	elseif (option == setTravelToLocation)
 		ONpc.TravelToLocation = !ONpc.TravelToLocation
 		SetToggleOptionValue(setTravelToLocation, ONpc.TravelToLocation)
+
+	elseif (option == setEnemiesTravelToLocation)
+		ONpc.EnemiesTravelToLocation = !ONpc.EnemiesTravelToLocation
+		SetToggleOptionValue(setEnemiesTravelToLocation, ONpc.EnemiesTravelToLocation)
 
 	elseif (option == setFurnitureOnlyBeds)
 		ONpc.FurnitureOnlyBeds = !ONpc.FurnitureOnlyBeds
@@ -326,6 +332,9 @@ event OnOptionHighlight(int option)
 	elseif (option == setTravelToLocation)
 		SetInfoText("$onpcs_highlight_travel")
 
+	elseif (option == setEnemiesTravelToLocation)
+		SetInfoText("$onpcs_highlight_travel_enemies")
+
 	elseif (option == setFurnitureOnlyBeds)
 		SetInfoText("$onpcs_highlight_furniture_only_beds")
 
@@ -414,6 +423,9 @@ function ResetDefaults()
 
 	ONpc.TravelToLocation = true
 	SetToggleOptionValue(setTravelToLocation, ONpc.TravelToLocation)
+
+	ONpc.EnemiesTravelToLocation = false
+	SetToggleOptionValue(setEnemiesTravelToLocation, ONpc.EnemiesTravelToLocation)
 
 	ONpc.FurnitureOnlyBeds = true
 	SetToggleOptionValue(setFurnitureOnlyBeds, ONpc.FurnitureOnlyBeds)

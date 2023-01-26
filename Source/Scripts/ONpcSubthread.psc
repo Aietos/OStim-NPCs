@@ -8,6 +8,7 @@ Actor SubActor
 Actor ThirdActor
 
 bool AlternativeBedSearchUsed
+bool IsEnemyScene
 
 ObjectReference CurrentFurniture
 
@@ -89,7 +90,10 @@ Function SetupScene(Actor dom, Actor sub, ObjectReference furnitureObj, bool alt
 
 	CurrentFurniture = furnitureObj
 
+	IsEnemyScene = false
+
 	if ONpc.IsEnemy(DomActor) && ONpc.IsEnemy(SubActor)
+		IsEnemyScene = true
 		ONpc.EnemyScenesThisNight += 1
 		ONpc.CurrentLocationEnemyScene = false
 	endif
@@ -99,7 +103,7 @@ EndFunction
 
 
 Event onUpdate()
-	if !ONpc.TravelToLocation
+	if !ONpc.TravelToLocation || (IsEnemyScene && !ONpc.EnemiesTravelToLocation)
 		; If actors were sleeping, we must wake them up before initiating scene
 		; Some mods change the NPCs clothes when they go to sleep
 		; So if we start a scene without waking them up, OStim may fail to remove the clothes properly

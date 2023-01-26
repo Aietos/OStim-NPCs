@@ -30,6 +30,7 @@ bool property AllowPlayerThreesomes auto
 bool property AllowCommonEnemies auto
 bool property StopWhenFound auto
 bool property TravelToLocation auto
+bool property EnemiesTravelToLocation auto
 
 bool property FurnitureOnlyBeds auto
 bool property OnlyAllowScenesInBeds auto
