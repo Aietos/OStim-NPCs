@@ -20,6 +20,7 @@ int property MaxScenes auto
 int property MinRelation auto
 int property MinNight auto
 int property MaxNight auto
+int property MaxEnemyScenesPerNight auto
 
 bool property ONpcDisabled auto
 
@@ -38,6 +39,9 @@ bool property NoScenesInTowns auto
 bool property NoScenesInGuilds auto
 bool property NoScenesInInns auto
 
+bool property SettingCellChange auto
+
+GlobalVariable property ONpcIsNight auto
 
 Actor property PlayerRef auto
 
@@ -56,7 +60,6 @@ Faction property WarlockFaction auto
 Faction property VampireFaction auto
 Faction property VampireThrallFaction auto
 Faction property Dlc2CultistFaction auto
-
 Faction property BardSingerFaction auto
 Faction property BardJobFaction auto
 
@@ -66,6 +69,8 @@ Keyword property LocTypeSettlement auto
 Keyword property LocTypeInn auto
 Keyword property LocTypeGuild auto
 Keyword property LocTypeDungeon auto
+
+Spell property CellChangeSpell auto
 
 Race property ElderRace auto
 
@@ -80,6 +85,10 @@ int property NPCsHadSexThisNight auto
 bool JArraysCreated
 bool ORomanceInstalled
 bool OPrivacyInstalled
+
+int property EnemyScenesThisNight auto
+bool property CurrentLocationEnemyScene auto
+Location CurrentPlayerLocation
 
 Faction OPFollowFaction
 
@@ -129,8 +138,12 @@ Function OnLoad()
 		OPCoraApproachFollower = GetOPrivacyPackage(0x00442D10)
 	endif
 
+	if !PlayerRef.HasSpell(CellChangeSpell)
+		PlayerRef.AddSpell(CellChangeSpell, false)
+	endif
+
 	if !ONpcDisabled
-		RegisterForSingleUpdate(scanfreq)
+		RestartScanning()
 	endif
 EndFunction
 
@@ -162,11 +175,7 @@ Event OnUpdate()
 			RegisterForSingleUpdate(scanfreq)
 		else
 			PrintToConsole("Is not night...")
-
-			if JArraysCreated
-				ClearJArrays()
-			endif
-
+			ResetNightVariables()
 			RegisterForSingleUpdateGameTime(GetTimeUntilNight())
 		endif
 	endif
@@ -174,7 +183,9 @@ EndEvent
 
 
 Event OnUpdateGameTime()
-	PrintToConsole("Night has fallen....")
+	PrintToConsole("Night has fallen.... ")
+	SetIsNightGlobal(1.0)
+	EnemyScenesThisNight = 0
 	RegisterForSingleUpdate(scanfreq)
 EndEvent
 
@@ -395,7 +406,7 @@ Actor Function GetPartnerForActor(Actor act, Actor[] ActorsArrayToUse)
 		elseif (isEnemy(act) && !isEnemy(currentActor)) || (!isEnemy(act) && isEnemy(currentActor))
 			isValid = False
 		else
-			if AllowCommonEnemies && isEnemy(act) && isEnemy(currentActor)
+			if AllowCommonEnemies && isEnemy(act) && isEnemy(currentActor) && CurrentLocationEnemyScene && EnemyScenesThisNight < MaxEnemyScenesPerNight
 				isValid = True
 			elseif act.HasAssociation(Spouse, currentActor) || act.HasAssociation(Courting, currentActor)
 				isValid = True
@@ -644,11 +655,11 @@ EndFunction
 
 Float Function GetTimeUntilNight()
 	if IsNight()
-		return 0.0
+		return 0.05
 	else 
-		float ret = (20 - currenthour())
+		float ret = (MinNight - CurrentHour())
 		if ret < 0.1
-			ret = 0.0
+			ret = 0.05
 		endif 
 		return ret
 	endif
@@ -668,8 +679,27 @@ Function PrintToConsole(String In) Global
 EndFunction
 
 
+Function UpdateCurrentPlayerLocation(Location newLocation)
+	if newLocation == None
+		CurrentLocationEnemyScene = False
+		CurrentPlayerLocation = None
+	elseif CurrentPlayerLocation != newLocation
+		; RNG on top of RNG because one RNG isn't enough
+		int locationEnemySceneChance = OSANative.RandomInt(30, 100)
+		CurrentLocationEnemyScene = OSANative.RandomInt(0, 99) < locationEnemySceneChance
+		CurrentPlayerLocation = newLocation
+	endif
+EndFunction
+
+
 Function RestartScanning()
-	RegisterForSingleUpdate(ScanFreq)
+	if isNight()
+		SetIsNightGlobal(1.0)
+		EnemyScenesThisNight = 0
+		RegisterForSingleUpdate(ScanFreq)
+	else
+		RegisterForSingleUpdateGameTime(GetTimeUntilNight())
+	endif
 EndFunction
 
 
@@ -689,9 +719,17 @@ ONpcSubthread Function GetUnusedSubthread()
 EndFunction
 
 
-Function CreateJArrays()
-	ClearJArrays()
+Function SetIsNightGlobal(float value)
+	ONpcIsNight.SetValue(value)
+EndFunction
 
+
+Int Function GetNightGlobal()
+	return ONpcIsNight.GetValue() as int
+EndFunction
+
+
+Function CreateJArrays()
 	NPCsInScene = JArray.object()
 	JValue.retain(NPCsInScene, "npcsInScene")
 
@@ -715,6 +753,16 @@ Function ClearJArrays()
 	JValue.release(FurnituresInUse)
 
 	JArraysCreated = false
+EndFunction
+
+
+Function ResetNightVariables()
+	SetIsNightGlobal(0)
+	EnemyScenesThisNight = 0
+
+	if JArraysCreated
+		ClearJArrays()
+	endif
 EndFunction
 
 

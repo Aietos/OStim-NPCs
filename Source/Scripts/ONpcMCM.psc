@@ -10,6 +10,7 @@ int setStopWhenFound
 int setTravelToLocation
 
 int setMaxScenes
+int setMaxEnemyScenesPerNight
 int setMinRelation
 
 int setMinNight
@@ -35,12 +36,12 @@ int setResetDefaults
 int setAddSpells
 int setRemoveSpells
 
-ONpcMain property ONpc auto
+Actor property PlayerRef auto
 
 Spell property MatchMakerSpellTarget auto
 Spell property MatchMakerSpellSelf auto
 
-Actor property PlayerRef auto
+ONpcMain property ONpc auto
 
 
 event OnInit()
@@ -94,6 +95,7 @@ event OnPageReset(string page)
 	setMinRelation = AddSliderOption("$onpcs_option_min_relation", ONpc.MinRelation, "{0}")
 	AddEmptyOption()
 
+	setMaxEnemyScenesPerNight = AddSliderOption("$onpcs_option_max_enemy_scenes", ONpc.MaxEnemyScenesPerNight, "{0}")
 	setMaxScenes = AddSliderOption("$onpcs_option_max_scenes", ONpc.MaxScenes, "{0}")
 	setMinNight = AddSliderOption("$onpcs_option_min_night", ONpc.MinNight - 12, "{0} PM")
 	setMaxNight = AddSliderOption("$onpcs_option_max_night", ONpc.MaxNight, "{0} AM")
@@ -117,6 +119,8 @@ event OnOptionSelect(int option)
 
 		if (!ONpc.ONpcDisabled)
 			ONpc.RestartScanning()
+		else
+			ONpc.ResetNightVariables()
 		endif
 
 	elseif (option == setAllowActiveFollowers)
@@ -194,6 +198,13 @@ event OnOptionSliderOpen(int option)
 		SetSliderDialogRange(1, 4)
 		SetSliderDialogInterval(1)
 
+	elseif (option == setMaxEnemyScenesPerNight)
+		SetSliderDialogStartValue(ONpc.MaxEnemyScenesPerNight)
+
+		SetSliderDialogDefaultValue(3)
+		SetSliderDialogRange(1, 5)
+		SetSliderDialogInterval(1)
+
 	elseif (option == setMinRelation)
 		SetSliderDialogStartValue(ONpc.MinRelation)
 
@@ -250,6 +261,10 @@ event OnOptionSliderAccept(int option, float value)
 	If (option == setMaxScenes)
 		ONpc.MaxScenes = value as int
 		SetSliderOptionValue(setMaxScenes, value, "{0}")
+
+	elseif (option == setMaxEnemyScenesPerNight)
+		ONpc.MaxEnemyScenesPerNight = value as int
+		SetSliderOptionValue(setMaxEnemyScenesPerNight, value, "{0}")
 
 	elseif (option == setMinRelation)
 		ONpc.MinRelation = value as int
@@ -334,6 +349,9 @@ event OnOptionHighlight(int option)
 
 	elseif (option == setMaxScenes)
 		SetInfoText("$onpcs_highlight_max_scenes")
+
+	elseif (option == setMaxEnemyScenesPerNight)
+		SetInfoText("$onpcs_highlight_max_enemy_scenes")
 
 	elseif (option == setMinNight)
 		SetInfoText("$onpcs_highlight_min_night")
@@ -420,7 +438,10 @@ function ResetDefaults()
 
 	ONpc.MaxScenes = 2
 	SetSliderOptionValue(setMaxScenes, 2.0, "{0}")
-	
+
+	ONpc.MaxEnemyScenesPerNight = 3
+	SetSliderOptionValue(setMaxEnemyScenesPerNight, 3.0, "{0}")
+
 	ONpc.MinNight = 20
 	SetSliderOptionValue(setMinNight, 8.0, "{0} PM")
 

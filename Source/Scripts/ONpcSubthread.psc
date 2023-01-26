@@ -89,6 +89,11 @@ Function SetupScene(Actor dom, Actor sub, ObjectReference furnitureObj, bool alt
 
 	CurrentFurniture = furnitureObj
 
+	if ONpc.IsEnemy(DomActor) && ONpc.IsEnemy(SubActor)
+		ONpc.EnemyScenesThisNight += 1
+		ONpc.CurrentLocationEnemyScene = false
+	endif
+
 	RegisterForSingleUpdate(0.01)
 EndFunction
 
