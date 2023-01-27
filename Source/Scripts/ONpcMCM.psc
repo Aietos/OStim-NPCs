@@ -18,14 +18,14 @@ int setMinNight
 int setMaxNight
 
 int setScanFreq
-int setScanRadius
 
 int setWeightMF
 int setWeightFF
 int setWeightMM
 
+int setEnableFurniture
 int setFurnitureOnlyBeds
-int setOnlyAllowScenesInBeds
+int setScenesStartIn
 
 int setFollowersNoScenesDungeons
 int setNoScenesInTowns
@@ -75,8 +75,9 @@ event OnPageReset(string page)
 	setEnemiesTravelToLocation = AddToggleOption("$onpcs_option_travel_enemies", ONpc.EnemiesTravelToLocation)
 	AddEmptyOption()
 
+	setEnableFurniture = AddToggleOption("$onpcs_option_enable_furniture", ONpc.EnableFurniture)
 	setFurnitureOnlyBeds = AddToggleOption("$onpcs_option_furniture_beds", ONpc.FurnitureOnlyBeds)
-	setOnlyAllowScenesInBeds = AddToggleOption("$onpcs_option_scenes_beds", ONpc.OnlyAllowScenesInBeds)
+	setScenesStartIn = AddMenuOption("$onpcs_option_scenes_beds", ONpc.ScenesStartInStrings[ONpc.ScenesStartIn])
 	AddEmptyOption()
 
 	setFollowersNoScenesDungeons = AddToggleOption("$onpcs_option_followers_dungeons", ONpc.FollowersNoScenesDungeons)
@@ -104,7 +105,6 @@ event OnPageReset(string page)
 	AddEmptyOption()
 
 	setScanFreq = AddSliderOption("$onpcs_option_scan_freq", ONpc.ScanFreq, "{0} seconds")
-	setScanRadius = AddSliderOption("$onpcs_option_scan_radius", ONpc.ScanRadius * 0.01428, "{0} meters")
 
 	AddEmptyOption()
 
@@ -149,13 +149,13 @@ event OnOptionSelect(int option)
 		ONpc.EnemiesTravelToLocation = !ONpc.EnemiesTravelToLocation
 		SetToggleOptionValue(setEnemiesTravelToLocation, ONpc.EnemiesTravelToLocation)
 
+	elseif (option == setEnableFurniture)
+		ONpc.EnableFurniture = !ONpc.EnableFurniture
+		SetToggleOptionValue(setEnableFurniture, ONpc.EnableFurniture)
+
 	elseif (option == setFurnitureOnlyBeds)
 		ONpc.FurnitureOnlyBeds = !ONpc.FurnitureOnlyBeds
 		SetToggleOptionValue(setFurnitureOnlyBeds, ONpc.FurnitureOnlyBeds)
-
-	elseif (option == setOnlyAllowScenesInBeds)
-		ONpc.OnlyAllowScenesInBeds = !ONpc.OnlyAllowScenesInBeds
-		SetToggleOptionValue(setOnlyAllowScenesInBeds, ONpc.OnlyAllowScenesInBeds)
 
 	elseif (option == setFollowersNoScenesDungeons)
 		ONpc.FollowersNoScenesDungeons = !ONpc.FollowersNoScenesDungeons
@@ -236,12 +236,6 @@ event OnOptionSliderOpen(int option)
 		SetSliderDialogRange(5, 180)
 		SetSliderDialogInterval(5)
 
-	elseif (option == setScanRadius)
-		SetSliderDialogStartValue(ONpc.ScanRadius * 0.01428)
-		SetSliderDialogDefaultValue(100.0)
-		SetSliderDialogRange(20, 300)
-		SetSliderDialogInterval(5)
-
 	elseif (option == setWeightMF)
 		SetSliderDialogStartValue(ONpc.WeightMF)
 		SetSliderDialogDefaultValue(100.0)
@@ -294,10 +288,6 @@ event OnOptionSliderAccept(int option, float value)
 		ONpc.ScanFreq = value as int
 		SetSliderOptionValue(setScanFreq, value, "{0} seconds")
 
-	elseif (option == setScanRadius)
-		ONpc.ScanRadius = value / 0.01428
-		SetSliderOptionValue(setScanRadius, value, "{0} meters")
-
 	elseif (option == setWeightMF)
 		ONpc.WeightMF = value as int
 		SetSliderOptionValue(setWeightMF, value, "{0}")
@@ -310,6 +300,23 @@ event OnOptionSliderAccept(int option, float value)
 		ONpc.WeightMM = value as int
 		SetSliderOptionValue(setWeightMM, value, "{0}")
 	EndIf
+endEvent
+
+
+event OnOptionMenuOpen(int option)
+	if (option == setScenesStartIn)
+		SetMenuDialogOptions(ONpc.ScenesStartInStrings)
+		SetMenuDialogStartIndex(ONpc.ScenesStartIn)
+		SetMenuDialogDefaultIndex(2)
+	endIf
+endEvent
+
+
+event OnOptionMenuAccept(int option, int index)
+	if (option == setScenesStartIn)
+		ONpc.ScenesStartIn = index
+		SetMenuOptionValue(setScenesStartIn, ONpc.ScenesStartInStrings[index])
+	endIf
 endEvent
 
 
@@ -335,10 +342,13 @@ event OnOptionHighlight(int option)
 	elseif (option == setEnemiesTravelToLocation)
 		SetInfoText("$onpcs_highlight_travel_enemies")
 
+	elseif (option == setEnableFurniture)
+		SetInfoText("$onpcs_highlight_enable_furniture")
+
 	elseif (option == setFurnitureOnlyBeds)
 		SetInfoText("$onpcs_highlight_furniture_only_beds")
 
-	elseif (option == setOnlyAllowScenesInBeds)
+	elseif (option == setScenesStartIn)
 		SetInfoText("$onpcs_highlight_allow_scenes_in_beds")
 
 	elseif (option == setFollowersNoScenesDungeons)
@@ -370,9 +380,6 @@ event OnOptionHighlight(int option)
 
 	elseif (option == setScanFreq)
 		SetInfoText("$onpcs_highlight_scan_freq")
-
-	elseif (option == setScanRadius)
-		SetInfoText("$onpcs_highlight_scan_radius")
 
 	elseif (option == setWeightMF)
 		SetInfoText("$onpcs_highlight_weight_mf")
@@ -427,11 +434,14 @@ function ResetDefaults()
 	ONpc.EnemiesTravelToLocation = false
 	SetToggleOptionValue(setEnemiesTravelToLocation, ONpc.EnemiesTravelToLocation)
 
+	ONpc.EnableFurniture = true
+	SetToggleOptionValue(setEnableFurniture, ONpc.EnableFurniture)
+
 	ONpc.FurnitureOnlyBeds = true
 	SetToggleOptionValue(setFurnitureOnlyBeds, ONpc.FurnitureOnlyBeds)
 
-	ONpc.OnlyAllowScenesInBeds = false
-	SetToggleOptionValue(setOnlyAllowScenesInBeds, ONpc.OnlyAllowScenesInBeds)
+	ONpc.ScenesStartIn = ONpc.BedsOnly
+	SetMenuOptionValue(setScenesStartIn,  ONpc.ScenesStartInStrings[ONpc.BedsOnly])
 
 	ONpc.FollowersNoScenesDungeons = true
 	SetToggleOptionValue(setFollowersNoScenesDungeons, ONpc.FollowersNoScenesDungeons)
@@ -462,9 +472,6 @@ function ResetDefaults()
 
 	ONpc.ScanFreq = 10
 	SetSliderOptionValue(setScanFreq, 10.0, "{0} seconds")
-
-	ONpc.ScanRadius = 100.0 / 0.01428
-	SetSliderOptionValue(setScanRadius, 100, "{0} meters")
 
 	ONpc.WeightMF = 100
 	SetSliderOptionValue(setWeightMF, 100.0, "{0}")

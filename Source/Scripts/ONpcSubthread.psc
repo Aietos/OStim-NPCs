@@ -71,6 +71,8 @@ Function StartScene()
 	RegisterForModEvent("ostim_subthread_start", "NpcSceneStart")
 	RegisterForModEvent("ostim_subthread_end", "NpcSceneEnd")
 
+	Utility.Wait(0.3)
+
 	CurrentOStimSubthread = OStim.GetUnusedSubthread()
 
 	if !CurrentOStimSubthread || !CheckActorsStillValid() || !CurrentOStimSubthread.StartSubthreadScene(DomActor, SubActor, zThirdActor = ThirdActor, furnitureObj = CurrentFurniture)
@@ -119,7 +121,7 @@ Event onUpdate()
 			while DomActor.GetSleepState() != 0 || SubActor.GetSleepState() != 0
 				numberLoops += 1
 
-				if numberLoops >= 20
+				if numberLoops >= 10
 					SceneEndProcedures()
 					return
 				endif
@@ -129,6 +131,8 @@ Event onUpdate()
 
 			Utility.Wait(1.5)
 		endif
+
+		DomActor.setposition(SubActor.x, SubActor.y, SubActor.z)
 
 		if CurrentFurniture != none
 			DomActor.setposition(CurrentFurniture.x, CurrentFurniture.y, CurrentFurniture.z)
@@ -204,7 +208,7 @@ bool Function Invite()
 
 		ONpcMain.PrintToConsole("Actor " + DomActor.GetActorBase().GetName() + " is travelling to " + SubActor.GetActorBase().GetName())
 
-		if stuckTimer >= 30
+		if stuckTimer >= 20
 			DomActor.setposition(SubActor.x, SubActor.y, SubActor.z)
 		else
 			utility.wait(1)
@@ -233,7 +237,7 @@ bool Function GoToFurniture()
 		stucktimer += 1
 		ONpcMain.PrintToConsole("Actor " + DomActor.GetActorBase().GetName() + " is travelling to Furniture")
 
-		if stucktimer >= 30
+		if stucktimer >= 20
 			return true
 		else
 			utility.wait(1)

@@ -1,7 +1,5 @@
 Scriptname ONpcMain extends Quest
 
-Actor[] Actors
-
 Actor[] ActorsMale
 Actor[] ActorsFemale
 
@@ -32,8 +30,15 @@ bool property StopWhenFound auto
 bool property TravelToLocation auto
 bool property EnemiesTravelToLocation auto
 
+bool property EnableFurniture auto
 bool property FurnitureOnlyBeds auto
-bool property OnlyAllowScenesInBeds auto
+
+int property ScenesStartIn auto
+int property Anywhere = 0 AutoReadOnly
+int property AnyFurniture = 1 AutoReadOnly
+int property BedsOnly = 2 AutoReadOnly
+
+string[] Property ScenesStartInStrings Auto
 
 bool property FollowersNoScenesDungeons auto
 bool property NoScenesInTowns auto
@@ -123,6 +128,11 @@ Function OnLoad()
 	Scanning = false
 	ActiveScenes = 0
 
+	ScenesStartInStrings = new string[3]
+	ScenesStartInStrings[0] = "Anywhere"
+	ScenesStartInStrings[1] = "Any Furniture"
+	ScenesStartInStrings[2] = "Beds Only"
+
 	ORomanceInstalled = Game.IsPluginInstalled("ORomance.esp")
 	OPrivacyInstalled = Game.IsPluginInstalled("OPrivacy.esp")
 
@@ -203,13 +213,11 @@ Function Scan(ONpcSubthread SubthreadToUse)
 	Scanning = true
 	PrintToConsole("now scanning!")
 
-	PrintToConsole("Scan radius is " + ScanRadius)
 	GetSurroundingActors()
-	PrintToConsole("Actors length is " + Actors.length)
 	PrintToConsole("ActorsMale length is " + ActorsMale.length)
 	PrintToConsole("ActorsFemale length is " + ActorsFemale.length)
 
-	if !Actors.length
+	if !ActorsFemale.length && !ActorsMale.length
 		Scanning = false
 		return
 	endif
@@ -283,10 +291,11 @@ Function Scan(ONpcSubthread SubthreadToUse)
 				Scanning = false
 				return
 			endif
-		elseif OStim.useFurniture
+		elseif EnableFurniture
 			furnitureRef = FindEmptyFurniture(Dom)
 
-			if OnlyAllowScenesInBeds && !furnitureRef
+			if (ScenesStartIn == AnyFurniture || ScenesStartIn == BedsOnly) && !furnitureRef
+				PrintToConsole("No furniture found....")
 				Scanning = false
 				return
 			endif
@@ -313,37 +322,36 @@ EndFunction
 
 
 Function GetSurroundingActors()
-	Actors = MiscUtil.ScanCellNpcs(centeron = PlayerRef, radius = ScanRadius)
+	Cell currentCell = PlayerRef.GetParentCell()
 
-	int i = Actors.length
+	if currentCell
+		int actorRefsAmountCell = currentCell.GetNumRefs(43)
 
-	if !i
-		return
-	endif
+		if actorRefsAmountCell > 2
+			Actor currentActor
 
-	ActorsFemale = PapyrusUtil.ActorArray(50)
-	ActorsMale = PapyrusUtil.ActorArray(50)
+			ActorsFemale = PapyrusUtil.ActorArray(50)
+			ActorsMale = PapyrusUtil.ActorArray(50)
 
-	int femaleIndex = 0
-	int maleIndex = 0
+			int femaleIndex = 0
+			int maleIndex = 0
 
-	Actor currentActor
+			While actorRefsAmountCell
+				actorRefsAmountCell -= 1
+				currentActor = currentCell.GetNthRef(actorRefsAmountCell, 43) as Actor
 
-	while i > 0
-		i -= 1
-
-		currentActor = Actors[i]
-
-		if ActorIsValid(currentActor)
-			if OStim.AppearsFemale(currentActor)
-				ActorsFemale[femaleIndex] = currentActor
-				femaleIndex += 1
-			else
-				ActorsMale[maleIndex] = currentActor
-				maleIndex += 1
-			endif
+				if ActorIsValid(currentActor)
+					if OStim.AppearsFemale(currentActor)
+						ActorsFemale[femaleIndex] = currentActor
+						femaleIndex += 1
+					else
+						ActorsMale[maleIndex] = currentActor
+						maleIndex += 1
+					endif
+				endif
+			EndWhile
 		endif
-	endwhile
+	endif
 
 	ActorsFemale = PapyrusUtil.RemoveActor(ActorsFemale, none)
 	ActorsMale = PapyrusUtil.RemoveActor(ActorsMale, none)
@@ -386,7 +394,10 @@ EndFunction
 Actor Function GetPartnerForActor(Actor act, Actor[] ActorsArrayToUse)
 	int i = ActorsArrayToUse.Length
 
-	Actor currentActor
+	Actor currentActor = None
+	Actor currentPartner = None
+
+	float actorDistance = 0
 
 	bool isValid
 
@@ -409,46 +420,60 @@ Actor Function GetPartnerForActor(Actor act, Actor[] ActorsArrayToUse)
 		else
 			if AllowCommonEnemies && isEnemy(act) && isEnemy(currentActor) && CurrentLocationEnemyScene && EnemyScenesThisNight < MaxEnemyScenesPerNight
 				isValid = True
-			elseif act.HasAssociation(Spouse, currentActor) || act.HasAssociation(Courting, currentActor)
-				isValid = True
 			elseif currentActor.GetRelationshipRank(act) < MinRelation
 				isValid = False
+			elseif act.HasAssociation(Spouse, currentActor) || act.HasAssociation(Courting, currentActor)
+				; if they're married / courting, return this partner immediately
+				return currentActor
 			else
 				isValid = True
 			endif
 		endif
 
 		if isValid
-			return currentActor
+			; prioritise closest partner
+			actorDistance = act.GetDistance(currentActor)
+
+			if !currentPartner || actorDistance < act.GetDistance(currentPartner)
+				if actorDistance < 763 ; if distance is 10 meters or less, that's close enough, return this actor
+					return currentActor
+				endif
+
+				currentPartner = currentActor
+			endif
 		endif
 	endwhile
 
-	return None
+	return currentPartner
 EndFunction
 
 
 ObjectReference Function FindEmptyFurniture(Actor Dom)
-	ObjectReference[] Furnitures = OFurniture.FindFurniture(2, Dom, (OStim.FurnitureSearchDistance + 1) * 100.0, 96)
+	ObjectReference[] Furnitures = OFurniture.FindFurniture(2, Dom, (OStim.FurnitureSearchDistance + 15) * 100.0, 96)
 
 	int i = Furnitures.Length
 
 	bool useFurniture
 
+	ObjectReference currentFurniture
+
 	While i > 0
 		i -= 1
 
-		if JArray.FindForm(FurnituresInUse, Furnitures[i]) == -1
+		currentFurniture = Furnitures[i]
+
+		if JArray.FindForm(FurnituresInUse, currentFurniture) == -1
 			useFurniture = true
 
-			if (FurnitureOnlyBeds || OnlyAllowScenesInBeds)
-				if OFurniture.GetFurnitureType(Furnitures[i]) != OStim.FURNITURE_TYPE_BED
+			if (FurnitureOnlyBeds || ScenesStartIn == BedsOnly)
+				if OFurniture.GetFurnitureType(currentFurniture) != OStim.FURNITURE_TYPE_BED
 					useFurniture = false
 				endif
 			endif
 
 			if useFurniture
-				JArray.addForm(FurnituresInUse, Furnitures[i])
-				return Furnitures[i]
+				JArray.addForm(FurnituresInUse, currentFurniture)
+				return currentFurniture
 			endif
 		endif
 	EndWhile
@@ -499,7 +524,7 @@ EndFunction
 
 
 Bool Function IsInvalidNpc(Actor Act)
-	return !Act || Act == PlayerRef || Act.IsDead() || Act.isDisabled() || Act.IsChild() || !Act.HasKeywordString("ActorTypeNPC") || Act.isGhost() || IsInvalidNpcUserPreferences(Act)
+	return !Act || Act == PlayerRef || !Act.HasKeywordString("ActorTypeNPC") || Act.IsDead() || Act.isDisabled() || Act.IsChild() || Act.isGhost() || IsInvalidNpcUserPreferences(Act)
 EndFunction
 
 
