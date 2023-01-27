@@ -169,23 +169,16 @@ Event OnUpdate()
 		endif
 	
 		if !Scanning && isNightTime && !PlayerRef.IsInCombat() && ActiveScenes < MaxScenes && LocationIsValid()
-			PrintToConsole("scanning!")
-
 			ONpcSubthread subthreadToUse = GetUnusedSubthread()
-			PrintToConsole(subthreadToUse)
 
 			if subthreadToUse
 				Scan(subthreadToUse)
 			endif
 		endif
 
-		PrintToConsole("Scan is over! Checking for night...")
-
 		if isNightTime
-			PrintToConsole("Is night!!")
 			RegisterForSingleUpdate(scanfreq)
 		else
-			PrintToConsole("Is not night...")
 			ResetNightVariables()
 			RegisterForSingleUpdateGameTime(GetTimeUntilNight())
 		endif
@@ -194,7 +187,7 @@ EndEvent
 
 
 Event OnUpdateGameTime()
-	PrintToConsole("Night has fallen.... ")
+	PrintToConsole("Night has fallen...")
 	SetIsNightGlobal(1.0)
 	EnemyScenesThisNight = 0
 	RegisterForSingleUpdate(scanfreq)
@@ -211,11 +204,8 @@ EndEvent
 
 Function Scan(ONpcSubthread SubthreadToUse)
 	Scanning = true
-	PrintToConsole("now scanning!")
 
 	GetSurroundingActors()
-	PrintToConsole("ActorsMale length is " + ActorsMale.length)
-	PrintToConsole("ActorsFemale length is " + ActorsFemale.length)
 
 	if !ActorsFemale.length && !ActorsMale.length
 		Scanning = false
@@ -227,8 +217,6 @@ Function Scan(ONpcSubthread SubthreadToUse)
 	Actor Third
 
 	string SexType = GetSexType()
-
-	PrintToConsole("Sex type is " + SexType)
 
 	if SexType == "mf" || SexType == "threesome"
 		if !ActorsMale.length || !ActorsFemale.length
@@ -265,14 +253,7 @@ Function Scan(ONpcSubthread SubthreadToUse)
 		endif
 	endif
 
-	PrintToConsole("Dom Actor is " + Dom.GetActorBase().GetName())
-	PrintToConsole("Sub Actor is " + Sub.GetActorBase().GetName())
-
-	PrintToConsole("Checking if Actors are loaded")
-
 	if Dom.Is3DLoaded() && Sub.Is3DLoaded() && (!Third || Third.Is3DLoaded())
-		PrintToConsole("starting scene setup")
-
 		bool alternativeBedSearch
 
 		; If either actor is sleeping, we use an alternate bed search
@@ -295,7 +276,6 @@ Function Scan(ONpcSubthread SubthreadToUse)
 			furnitureRef = FindEmptyFurniture(Dom)
 
 			if (ScenesStartIn == AnyFurniture || ScenesStartIn == BedsOnly) && !furnitureRef
-				PrintToConsole("No furniture found....")
 				Scanning = false
 				return
 			endif
@@ -313,7 +293,6 @@ Function Scan(ONpcSubthread SubthreadToUse)
 		SubthreadToUse.SetupScene(Dom, Sub, furnitureRef, alternativeBedSearch, None)
 		Scanning = false
 	else
-		PrintToConsole("They were not loaded")
 		Scanning = false
 	endif
 

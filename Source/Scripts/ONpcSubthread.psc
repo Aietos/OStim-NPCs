@@ -34,9 +34,6 @@ EndEvent
 
 
 Event NpcSceneStart(string eventname, string strarg, float numarg, form sender)
-	ONpcMain.PrintToConsole("NPC scene started!!")
-	ONpcMain.PrintToConsole("IDs are: " + numarg + " and " + CurrentOStimSubthread.id)
-
 	if numarg == CurrentOStimSubthread.id
 		JArray.addForm(ONpc.NPCsHadSexThisNight, DomActor)
 		JArray.addForm(ONpc.NPCsHadSexThisNight, SubActor)
@@ -66,8 +63,6 @@ EndEvent
 
 
 Function StartScene()
-	ONpcMain.PrintToConsole("starting scene!")
-
 	RegisterForModEvent("ostim_subthread_start", "NpcSceneStart")
 	RegisterForModEvent("ostim_subthread_end", "NpcSceneEnd")
 
@@ -176,8 +171,6 @@ Function SceneEndProcedures()
 	UnregisterForModEvent("ostim_subthread_start")
 	UnregisterForModEvent("ostim_subthread_end")
 
-	ONpcMain.PrintToConsole("Running scene end procedures")
-
 	JArray.EraseForm(ONpc.NPCsInScene, DomActor)
 	JArray.EraseForm(ONpc.NPCsInScene, SubActor)
 	JArray.EraseForm(ONpc.NPCsInScene, ThirdActor)
@@ -206,8 +199,6 @@ bool Function Invite()
 
 		stuckTimer += 1
 
-		ONpcMain.PrintToConsole("Actor " + DomActor.GetActorBase().GetName() + " is travelling to " + SubActor.GetActorBase().GetName())
-
 		if stuckTimer >= 20
 			DomActor.setposition(SubActor.x, SubActor.y, SubActor.z)
 		else
@@ -235,7 +226,6 @@ bool Function GoToFurniture()
 		endif
 
 		stucktimer += 1
-		ONpcMain.PrintToConsole("Actor " + DomActor.GetActorBase().GetName() + " is travelling to Furniture")
 
 		if stucktimer >= 20
 			return true
