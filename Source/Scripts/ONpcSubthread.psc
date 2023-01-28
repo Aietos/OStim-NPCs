@@ -66,8 +66,6 @@ Function StartScene()
 	RegisterForModEvent("ostim_subthread_start", "NpcSceneStart")
 	RegisterForModEvent("ostim_subthread_end", "NpcSceneEnd")
 
-	Utility.Wait(0.3)
-
 	CurrentOStimSubthread = OStim.GetUnusedSubthread()
 
 	if !CurrentOStimSubthread || !CheckActorsStillValid() || !CurrentOStimSubthread.StartSubthreadScene(DomActor, SubActor, zThirdActor = ThirdActor, furnitureObj = CurrentFurniture)
@@ -171,11 +169,14 @@ Function SceneEndProcedures()
 	UnregisterForModEvent("ostim_subthread_start")
 	UnregisterForModEvent("ostim_subthread_end")
 
-	JArray.EraseForm(ONpc.NPCsInScene, DomActor)
-	JArray.EraseForm(ONpc.NPCsInScene, SubActor)
-	JArray.EraseForm(ONpc.NPCsInScene, ThirdActor)
+	; do this check for edge case where NPC OStim scene ends after night has ended, and thus JArrays are already cleared
+	if ONpc.JArraysCreated
+		JArray.EraseForm(ONpc.NPCsInScene, DomActor)
+		JArray.EraseForm(ONpc.NPCsInScene, SubActor)
+		JArray.EraseForm(ONpc.NPCsInScene, ThirdActor)
 
-	JArray.EraseForm(ONpc.FurnituresInUse, CurrentFurniture)
+		JArray.EraseForm(ONpc.FurnituresInUse, CurrentFurniture)
+	endif
 
 	ONpcThreadInUse = false
 	ONpc.activeScenes -= 1

@@ -232,8 +232,8 @@ event OnOptionSliderOpen(int option)
 
 	elseif (option == setScanFreq)
 		SetSliderDialogStartValue(ONpc.ScanFreq)
-		SetSliderDialogDefaultValue(20.0)
-		SetSliderDialogRange(5, 180)
+		SetSliderDialogDefaultValue(15.0)
+		SetSliderDialogRange(10, 120)
 		SetSliderDialogInterval(5)
 
 	elseif (option == setWeightMF)
@@ -470,8 +470,8 @@ function ResetDefaults()
 	ONpc.MaxNight = 4
 	SetSliderOptionValue(setMaxNight, 4.0, "{0} AM")
 
-	ONpc.ScanFreq = 10
-	SetSliderOptionValue(setScanFreq, 10.0, "{0} seconds")
+	ONpc.ScanFreq = 15
+	SetSliderOptionValue(setScanFreq, 15.0, "{0} seconds")
 
 	ONpc.WeightMF = 100
 	SetSliderOptionValue(setWeightMF, 100.0, "{0}")

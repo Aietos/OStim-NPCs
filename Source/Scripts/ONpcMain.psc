@@ -88,7 +88,8 @@ int property NPCsInScene auto
 int property FurnituresInUse auto
 int property NPCsHadSexThisNight auto
 
-bool JArraysCreated
+bool property JArraysCreated auto
+
 bool ORomanceInstalled
 bool OPrivacyInstalled
 
