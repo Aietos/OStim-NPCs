@@ -177,7 +177,7 @@ Event OnUpdate()
 		endif
 
 		if isNightTime
-			RegisterForSingleUpdate(scanfreq)
+			RegisterForSingleUpdate(ScanFreq)
 		else
 			ResetNightVariables()
 			RegisterForSingleUpdateGameTime(GetTimeUntilNight())
@@ -190,7 +190,7 @@ Event OnUpdateGameTime()
 	PrintToConsole("Night has fallen...")
 	SetIsNightGlobal(1.0)
 	EnemyScenesThisNight = 0
-	RegisterForSingleUpdate(scanfreq)
+	RegisterForSingleUpdate(ScanFreq)
 EndEvent
 
 
@@ -291,9 +291,6 @@ Function Scan(ONpcSubthread SubthreadToUse)
 		endif
 
 		SubthreadToUse.SetupScene(Dom, Sub, furnitureRef, alternativeBedSearch, None)
-		Scanning = false
-	else
-		Scanning = false
 	endif
 
 	Scanning = false
@@ -303,14 +300,14 @@ EndFunction
 Function GetSurroundingActors()
 	Cell currentCell = PlayerRef.GetParentCell()
 
+	ActorsFemale = PapyrusUtil.ActorArray(50)
+	ActorsMale = PapyrusUtil.ActorArray(50)
+
 	if currentCell
 		int actorRefsAmountCell = currentCell.GetNumRefs(43)
 
 		if actorRefsAmountCell > 2
 			Actor currentActor
-
-			ActorsFemale = PapyrusUtil.ActorArray(50)
-			ActorsMale = PapyrusUtil.ActorArray(50)
 
 			int femaleIndex = 0
 			int maleIndex = 0
@@ -385,8 +382,9 @@ Actor Function GetPartnerForActor(Actor act, Actor[] ActorsArrayToUse)
 
 	while i > 0
 		i -= 1
-		isValid = true
 		currentActor = ActorsArrayToUse[i]
+
+		isValid = true
 
 		if currentActor.HasAssociation(ParentChild, act) || currentActor.HasAssociation(Siblings, act) || currentActor.HasAssociation(Cousins, act)
 			isValid = False
@@ -397,18 +395,22 @@ Actor Function GetPartnerForActor(Actor act, Actor[] ActorsArrayToUse)
 		elseif (isEnemy(act) && !isEnemy(currentActor)) || (!isEnemy(act) && isEnemy(currentActor))
 			isValid = False
 		else
-			if AllowCommonEnemies && isEnemy(act) && isEnemy(currentActor) && CurrentLocationEnemyScene && EnemyScenesThisNight < MaxEnemyScenesPerNight
-				isValid = True
-			elseif currentActor.GetRelationshipRank(act) < MinRelation
-				isValid = False
-			elseif act.HasAssociation(Spouse, currentActor) || act.HasAssociation(Courting, currentActor)
+			if act.HasAssociation(Spouse, currentActor) || act.HasAssociation(Courting, currentActor)
 				; if they're married / courting, return this partner immediately
 				return currentActor
+			elseif AllowCommonEnemies && isEnemy(act) && isEnemy(currentActor) && CurrentLocationEnemyScene && EnemyScenesThisNight < MaxEnemyScenesPerNight
+				isValid = True
+			; this check has to be here because the above conditions might be true, but relationship rank might not match their association type!
+			elseif currentActor.GetRelationshipRank(act) < MinRelation
+				isValid = False
 			else
 				isValid = True
 			endif
 		endif
 
+		; If partner is valid, we will check how far away the partner is
+		; We prioritise the potential partners that are closest to the dom actor so the scenes take less time to setup
+		; This also prevents NPCs from teleporting across large cells, making the visual experience much better
 		if isValid
 			; prioritise closest partner
 			actorDistance = act.GetDistance(currentActor)
@@ -441,9 +443,13 @@ ObjectReference Function FindEmptyFurniture(Actor Dom)
 
 		currentFurniture = Furnitures[i]
 
+		; Check if furniture is already being used by another OStim scene
+		; Unfortunately, we have to do it our own way with JArrays since we can't reliable mark furniture
+		; as being in use with Skyrim's native functions
 		if JArray.FindForm(FurnituresInUse, currentFurniture) == -1
 			useFurniture = true
 
+			; If scenes are set to only start in beds, then we won't return furniture that aren't beds
 			if (FurnitureOnlyBeds || ScenesStartIn == BedsOnly)
 				if OFurniture.GetFurnitureType(currentFurniture) != OStim.FURNITURE_TYPE_BED
 					useFurniture = false
@@ -462,7 +468,7 @@ EndFunction
 
 
 ObjectReference Function FindEmptyBed(Actor Dom)
-	ObjectReference[] Beds = OSANative.FindBed(Dom, (OStim.FurnitureSearchDistance + 1) * 100.0, 96.0)
+	ObjectReference[] Beds = OSANative.FindBed(Dom, (OStim.FurnitureSearchDistance + 15) * 100.0, 96.0)
 
 	Int i = Beds.Length
 
@@ -641,10 +647,8 @@ EndFunction
 
 Bool Function IsNight()
 	float hour = CurrentHour()
-	if ((hour <= maxnight) || (hour >= minnight))
-		return true
-	endif
-	return false
+
+	return hour <= MaxNight || hour >= MinNight
 EndFunction
 
 
