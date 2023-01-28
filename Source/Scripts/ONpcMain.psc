@@ -68,6 +68,7 @@ Faction property VampireThrallFaction auto
 Faction property Dlc2CultistFaction auto
 Faction property BardSingerFaction auto
 Faction property BardJobFaction auto
+Faction property FollowerFaction auto
 
 Keyword property LocTypeCity auto
 Keyword property LocTypeTown auto
@@ -514,16 +515,21 @@ Bool Function IsInvalidNpc(Actor Act)
 EndFunction
 
 
+Bool Function IsFollower(Actor Act)
+	return Act.IsPlayerTeamMate() || Act.IsInFaction(FollowerFaction)
+EndFunction
+
+
 Bool Function IsInvalidNpcUserPreferences(Actor Act)
 	if Act.GetRace() == ElderRace && !AllowElderRace
 		return true
 	endif
 
-	if !AllowActiveFollowers && Act.IsPlayerTeamMate()
+	if !AllowActiveFollowers && IsFollower(Act)
 		return true
 	endif
 
-	if AllowActiveFollowers && Act.IsPlayerTeamMate() && FollowersNoScenesDungeons && IsDungeon(PlayerRef.GetCurrentLocation())
+	if AllowActiveFollowers && IsFollower(Act) && FollowersNoScenesDungeons && IsDungeon(PlayerRef.GetCurrentLocation())
 		return true
 	endif
 

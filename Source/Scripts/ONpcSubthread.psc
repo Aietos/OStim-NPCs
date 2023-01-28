@@ -42,7 +42,7 @@ Event NpcSceneStart(string eventname, string strarg, float numarg, form sender)
 			JArray.addForm(ONpc.NPCsHadSexThisNight, ThirdActor)
 		endif
 
-		if ONpc.StopWhenFound
+		if !ONpc.IsFollower(DomActor) && !ONpc.IsFollower(SubActor) && ONpc.StopWhenFound
 			while CurrentOStimSubthread.AnimationRunning() && ONpc.StopWhenFound
 				if IsFound()
 					CurrentOStimSubthread.EndAnimation()
@@ -153,7 +153,7 @@ Event onUpdate()
 			SubActor.setposition(CurrentFurniture.x, CurrentFurniture.y, CurrentFurniture.z)
 		endif
 
-		if ONPC.StopWhenFound && isFound()
+		if !ONpc.IsFollower(DomActor) && !ONpc.IsFollower(SubActor) && ONpc.StopWhenFound && isFound()
 			SceneEndProcedures()
 			return
 		endif
