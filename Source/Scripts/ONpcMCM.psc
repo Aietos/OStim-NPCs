@@ -4,14 +4,16 @@ Scriptname ONpcMCM extends SKI_ConfigBase
 int setONpcsDisabled
 
 int setAllowActiveFollowers
+int setActiveFollowersEngageOtherNPCs
 int setAllowCommonEnemies
 
 int setStopWhenFound
 int setTravelToLocation
 int setEnemiesTravelToLocation
 
-int setMaxScenes
+int setMaxFollowerScenesPerNight
 int setMaxEnemyScenesPerNight
+int setMaxScenes
 int setMinRelation
 
 int setMinNight
@@ -26,6 +28,8 @@ int setWeightMM
 int setEnableFurniture
 int setFurnitureOnlyBeds
 int setScenesStartIn
+
+int setEnemiesIgnoreScenesStartInRules
 
 int setFollowersNoScenesDungeons
 int setNoScenesInTowns
@@ -66,6 +70,7 @@ event OnPageReset(string page)
 	AddEmptyOption()
 
 	setAllowActiveFollowers = AddToggleOption("$onpcs_option_allow_active_followers", ONpc.AllowActiveFollowers)
+	setActiveFollowersEngageOtherNPCs = AddToggleOption("$onpcs_option_active_followers_npcs", ONpc.ActiveFollowersEngageOtherNPCs)
 	setAllowElderRace = AddToggleOption("$onpcs_option_allow_elders", ONpc.AllowElderRace)
 	setAllowCommonEnemies = AddToggleOption("$onpcs_option_allow_common_enemies", ONpc.AllowCommonEnemies)
 	AddEmptyOption()
@@ -78,6 +83,7 @@ event OnPageReset(string page)
 	setEnableFurniture = AddToggleOption("$onpcs_option_enable_furniture", ONpc.EnableFurniture)
 	setFurnitureOnlyBeds = AddToggleOption("$onpcs_option_furniture_beds", ONpc.FurnitureOnlyBeds)
 	setScenesStartIn = AddMenuOption("$onpcs_option_scenes_beds", ONpc.ScenesStartInStrings[ONpc.ScenesStartIn])
+	setEnemiesIgnoreScenesStartInRules = AddToggleOption("$onpcs_option_enemies_ignore_scenes_start_in_rules", ONpc.EnemiesIgnoreScenesStartInRules)
 	AddEmptyOption()
 
 	setFollowersNoScenesDungeons = AddToggleOption("$onpcs_option_followers_dungeons", ONpc.FollowersNoScenesDungeons)
@@ -98,6 +104,7 @@ event OnPageReset(string page)
 	setMinRelation = AddSliderOption("$onpcs_option_min_relation", ONpc.MinRelation, "{0}")
 	AddEmptyOption()
 
+	setMaxFollowerScenesPerNight = AddSliderOption("$onpcs_option_max_follower_scenes", ONpc.MaxFollowerScenesPerNight, "{0}")
 	setMaxEnemyScenesPerNight = AddSliderOption("$onpcs_option_max_enemy_scenes", ONpc.MaxEnemyScenesPerNight, "{0}")
 	setMaxScenes = AddSliderOption("$onpcs_option_max_scenes", ONpc.MaxScenes, "{0}")
 	setMinNight = AddSliderOption("$onpcs_option_min_night", ONpc.MinNight - 12, "{0} PM")
@@ -122,12 +129,16 @@ event OnOptionSelect(int option)
 		if (!ONpc.ONpcDisabled)
 			ONpc.RestartScanning()
 		else
-			ONpc.ResetNightVariables()
+			ONpc.ResetNightVariables(0, true)
 		endif
 
 	elseif (option == setAllowActiveFollowers)
 		ONpc.AllowActiveFollowers = !ONpc.AllowActiveFollowers
 		SetToggleOptionValue(setAllowActiveFollowers, ONpc.AllowActiveFollowers)
+
+	elseif (option == setActiveFollowersEngageOtherNPCs)
+		ONpc.ActiveFollowersEngageOtherNPCs = !ONpc.ActiveFollowersEngageOtherNPCs
+		SetToggleOptionValue(setActiveFollowersEngageOtherNPCs, ONpc.ActiveFollowersEngageOtherNPCs)
 
 	elseif (option == setAllowElderRace)
 		ONpc.AllowElderRace = !ONpc.AllowElderRace
@@ -156,6 +167,10 @@ event OnOptionSelect(int option)
 	elseif (option == setFurnitureOnlyBeds)
 		ONpc.FurnitureOnlyBeds = !ONpc.FurnitureOnlyBeds
 		SetToggleOptionValue(setFurnitureOnlyBeds, ONpc.FurnitureOnlyBeds)
+
+	elseif (option == setEnemiesIgnoreScenesStartInRules)
+		ONpc.EnemiesIgnoreScenesStartInRules = !ONpc.EnemiesIgnoreScenesStartInRules
+		SetToggleOptionValue(setEnemiesIgnoreScenesStartInRules, ONpc.EnemiesIgnoreScenesStartInRules)
 
 	elseif (option == setFollowersNoScenesDungeons)
 		ONpc.FollowersNoScenesDungeons = !ONpc.FollowersNoScenesDungeons
@@ -202,6 +217,13 @@ event OnOptionSliderOpen(int option)
 
 		SetSliderDialogDefaultValue(2)
 		SetSliderDialogRange(1, 4)
+		SetSliderDialogInterval(1)
+
+	elseif (option == setMaxFollowerScenesPerNight)
+		SetSliderDialogStartValue(ONpc.MaxFollowerScenesPerNight)
+
+		SetSliderDialogDefaultValue(2)
+		SetSliderDialogRange(1, 5)
 		SetSliderDialogInterval(1)
 
 	elseif (option == setMaxEnemyScenesPerNight)
@@ -262,6 +284,10 @@ event OnOptionSliderAccept(int option, float value)
 		ONpc.MaxScenes = value as int
 		SetSliderOptionValue(setMaxScenes, value, "{0}")
 
+	elseif (option == setMaxFollowerScenesPerNight)
+		ONpc.MaxFollowerScenesPerNight = value as int
+		SetSliderOptionValue(setMaxFollowerScenesPerNight, value, "{0}")
+
 	elseif (option == setMaxEnemyScenesPerNight)
 		ONpc.MaxEnemyScenesPerNight = value as int
 		SetSliderOptionValue(setMaxEnemyScenesPerNight, value, "{0}")
@@ -293,7 +319,7 @@ event OnOptionSliderAccept(int option, float value)
 		SetSliderOptionValue(setWeightMF, value, "{0}")
 
 	elseif (option == setWeightFF)
-		ONpc.WeightMF = value as int
+		ONpc.WeightFF = value as int
 		SetSliderOptionValue(setWeightFF, value, "{0}")
 
 	elseif (option == setWeightMM)
@@ -327,6 +353,9 @@ event OnOptionHighlight(int option)
 	elseif (option == setAllowActiveFollowers)
 		SetInfoText("$onpcs_highlight_allow_active_followers")
 
+	elseif (option == setActiveFollowersEngageOtherNPCs)
+		SetInfoText("$onpcs_highlight_active_followers_npcs")
+
 	elseif (option == setAllowElderRace)
 		SetInfoText("$onpcs_highlight_allow_elders")
 
@@ -351,6 +380,9 @@ event OnOptionHighlight(int option)
 	elseif (option == setScenesStartIn)
 		SetInfoText("$onpcs_highlight_allow_scenes_in_beds")
 
+	elseif (option == setEnemiesIgnoreScenesStartInRules)
+		SetInfoText("$onpcs_highlight_enemies_ignore_scenes_start_in_rules")
+
 	elseif (option == setFollowersNoScenesDungeons)
 		SetInfoText("$onpcs_highlight_followers_dungeons")
 
@@ -368,6 +400,9 @@ event OnOptionHighlight(int option)
 
 	elseif (option == setMaxScenes)
 		SetInfoText("$onpcs_highlight_max_scenes")
+
+	elseif (option == setMaxFollowerScenesPerNight)
+		SetInfoText("$onpcs_highlight_max_follower_scenes")
 
 	elseif (option == setMaxEnemyScenesPerNight)
 		SetInfoText("$onpcs_highlight_max_enemy_scenes")
@@ -419,6 +454,9 @@ function ResetDefaults()
 	ONpc.AllowActiveFollowers = true
 	SetToggleOptionValue(setAllowActiveFollowers, ONpc.AllowActiveFollowers)
 
+	ONpc.ActiveFollowersEngageOtherNPCs = false
+	SetToggleOptionValue(setActiveFollowersEngageOtherNPCs, ONpc.ActiveFollowersEngageOtherNPCs)
+
 	ONpc.AllowElderRace = false
 	SetToggleOptionValue(setAllowElderRace, ONpc.AllowElderRace)
 
@@ -443,6 +481,9 @@ function ResetDefaults()
 	ONpc.ScenesStartIn = ONpc.BedsOnly
 	SetMenuOptionValue(setScenesStartIn,  ONpc.ScenesStartInStrings[ONpc.BedsOnly])
 
+	ONpc.EnemiesIgnoreScenesStartInRules = false
+	SetToggleOptionValue(setEnemiesIgnoreScenesStartInRules, ONpc.EnemiesIgnoreScenesStartInRules)
+
 	ONpc.FollowersNoScenesDungeons = true
 	SetToggleOptionValue(setFollowersNoScenesDungeons, ONpc.FollowersNoScenesDungeons)
 
@@ -460,6 +501,9 @@ function ResetDefaults()
 
 	ONpc.MaxScenes = 2
 	SetSliderOptionValue(setMaxScenes, 2.0, "{0}")
+
+	ONpc.MaxFollowerScenesPerNight = 2
+	SetSliderOptionValue(setMaxFollowerScenesPerNight, 2.0, "{0}")
 
 	ONpc.MaxEnemyScenesPerNight = 3
 	SetSliderOptionValue(setMaxEnemyScenesPerNight, 3.0, "{0}")

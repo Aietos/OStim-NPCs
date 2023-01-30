@@ -19,10 +19,12 @@ int property MinRelation auto
 int property MinNight auto
 int property MaxNight auto
 int property MaxEnemyScenesPerNight auto
+int property MaxFollowerScenesPerNight auto
 
 bool property ONpcDisabled auto
 
 bool property AllowActiveFollowers auto
+bool property ActiveFollowersEngageOtherNPCs auto
 bool property AllowElderRace auto
 bool property AllowPlayerThreesomes auto
 bool property AllowCommonEnemies auto
@@ -32,6 +34,7 @@ bool property EnemiesTravelToLocation auto
 
 bool property EnableFurniture auto
 bool property FurnitureOnlyBeds auto
+bool property EnemiesIgnoreScenesStartInRules auto
 
 int property ScenesStartIn auto
 int property Anywhere = 0 AutoReadOnly
@@ -48,6 +51,7 @@ bool property NoScenesInInns auto
 bool property SettingCellChange auto
 
 GlobalVariable property ONpcIsNight auto
+GlobalVariable property GameHour auto
 
 Actor property PlayerRef auto
 
@@ -93,6 +97,10 @@ bool property JArraysCreated auto
 
 bool ORomanceInstalled
 bool OPrivacyInstalled
+
+int property FollowerScenesThisNight auto
+int FollowerChanceLastHourChecked
+int FollowerOtherNPCsLastHourChecked
 
 int property EnemyScenesThisNight auto
 bool property CurrentLocationEnemyScene auto
@@ -181,7 +189,7 @@ Event OnUpdate()
 		if isNightTime
 			RegisterForSingleUpdate(ScanFreq)
 		else
-			ResetNightVariables()
+			ResetNightVariables(0, true)
 			RegisterForSingleUpdateGameTime(GetTimeUntilNight())
 		endif
 	endif
@@ -190,8 +198,9 @@ EndEvent
 
 Event OnUpdateGameTime()
 	PrintToConsole("Night has fallen...")
-	SetIsNightGlobal(1.0)
-	EnemyScenesThisNight = 0
+
+	ResetNightVariables(1, true)
+
 	RegisterForSingleUpdate(ScanFreq)
 EndEvent
 
@@ -278,8 +287,15 @@ Function Scan(ONpcSubthread SubthreadToUse)
 			furnitureRef = FindEmptyFurniture(Dom)
 
 			if (ScenesStartIn == AnyFurniture || ScenesStartIn == BedsOnly) && !furnitureRef
-				Scanning = false
-				return
+				if IsEnemy(Dom) && IsEnemy(Sub)
+					if !EnemiesIgnoreScenesStartInRules
+						Scanning = False
+						return
+					endif
+				else
+					Scanning = false
+					return
+				endif
 			endif
 		endif
 
@@ -382,31 +398,74 @@ Actor Function GetPartnerForActor(Actor act, Actor[] ActorsArrayToUse)
 	bool isActCourting = act.HasAssociation(Courting)
 	bool isActMarried = act.HasAssociation(Spouse)
 
+	int hour = Math.Floor(CurrentHour())
+
+	; if player has more than 2 followers
+	; this caching allows us to try to matchmake all followers in the same hour once
+	; Subsequent checks in the same hour, we won't try to matchmake followers until the hour changes
+	bool checkedFollowerOnFollower = FollowerChanceLastHourChecked == hour
+	bool checkedFollowerOnNpc = FollowerOtherNPCsLastHourChecked == hour
+
+	int followerSceneChance = 20
+	bool multipleFollowers = false
+
+	bool actIsFollower = IsFollower(act)
+	bool currentActIsFollower
+
+	bool followerOnNpcScene = WillBeFollowerOnNpcScene()
+
 	while i > 0
 		i -= 1
 		currentActor = ActorsArrayToUse[i]
 
+		currentActIsFollower = IsFollower(currentActor)
+
 		isValid = true
 
-		if currentActor.HasAssociation(ParentChild, act) || currentActor.HasAssociation(Siblings, act) || currentActor.HasAssociation(Cousins, act)
-			isValid = False
-		elseif isActCourting && !act.HasAssociation(Courting, currentActor)
-			isValid = False
-		elseif isActMarried && !act.HasAssociation(Spouse, currentActor)
-			isValid = False
-		elseif (isEnemy(act) && !isEnemy(currentActor)) || (!isEnemy(act) && isEnemy(currentActor))
-			isValid = False
+		if PotentialPartnerInvalid(act, currentActor, isActCourting, isActMarried)
+			isValid = false
 		else
 			if act.HasAssociation(Spouse, currentActor) || act.HasAssociation(Courting, currentActor)
 				; if they're married / courting, return this partner immediately
 				return currentActor
-			elseif AllowCommonEnemies && isEnemy(act) && isEnemy(currentActor) && CurrentLocationEnemyScene && EnemyScenesThisNight < MaxEnemyScenesPerNight
+			elseif AllowCommonEnemies && isEnemy(act) && isEnemy(currentActor) && CurrentLocationEnemyScene
 				isValid = True
 			; this check has to be here because the above conditions might be true, but relationship rank might not match their association type!
 			elseif currentActor.GetRelationshipRank(act) < MinRelation
 				isValid = False
 			else
 				isValid = True
+			endif
+
+			; special checks for followers
+			if (actIsFollower || currentActIsFollower) && (ActiveFollowersEngageOtherNPCs || AllowActiveFollowers)
+				if actIsFollower && currentActIsFollower && !followerOnNpcScene && !checkedFollowerOnFollower
+					FollowerChanceLastHourChecked = hour
+	
+					; reduce chance for each follower
+					; otherwise with many followers, ChanceRoll always returns true
+					if multipleFollowers
+						followerSceneChance = 10
+					endif
+	
+					; if they're both player followers, return this partner immediately
+					if OUtils.ChanceRoll(followerSceneChance)
+						return currentActor
+					endif
+	
+					multipleFollowers = true
+					isValid = False
+				elseif ((actIsFollower && !currentActIsFollower) || (!actIsFollower && currentActIsFollower)) && followerOnNpcScene && !checkedFollowerOnNpc
+					FollowerOtherNPCsLastHourChecked = hour
+
+					if OUtils.ChanceRoll(10)
+						return currentActor
+					endif
+
+					isValid = False
+				else
+					isValid = false
+				endif
 			endif
 		endif
 
@@ -525,15 +584,25 @@ Bool Function IsInvalidNpcUserPreferences(Actor Act)
 		return true
 	endif
 
-	if !AllowActiveFollowers && IsFollower(Act)
+	if !AllowActiveFollowers && !ActiveFollowersEngageOtherNPCs && IsFollower(Act)
 		return true
 	endif
 
-	if AllowActiveFollowers && IsFollower(Act) && FollowersNoScenesDungeons && IsDungeon(PlayerRef.GetCurrentLocation())
-		return true
+	if (AllowActiveFollowers || ActiveFollowersEngageOtherNPCs) && IsFollower(Act)
+		if FollowerScenesThisNight >= MaxFollowerScenesPerNight
+			return true
+		endif
+
+		if FollowersNoScenesDungeons && IsDungeon(PlayerRef.GetCurrentLocation())
+			return true
+		endif
 	endif
 
 	if !AllowCommonEnemies && isEnemy(Act)
+		return true
+	endif
+
+	if AllowCommonEnemies && isEnemy(Act) && EnemyScenesThisNight >= MaxEnemyScenesPerNight
 		return true
 	endif
 
@@ -590,6 +659,40 @@ Bool Function InvitePlayer()
 		return true
 	endif
 	return false
+EndFunction
+
+
+Bool Function PotentialPartnerInvalid(Actor Act, Actor PotentialPartner, bool isActCourting, bool isActMarried)
+	if PotentialPartner.HasAssociation(ParentChild, act) || PotentialPartner.HasAssociation(Siblings, act) || PotentialPartner.HasAssociation(Cousins, act)
+		return true
+	endif
+
+	if isActCourting && !act.HasAssociation(Courting, PotentialPartner)
+		return true
+	endif
+
+	if isActMarried && !act.HasAssociation(Spouse, PotentialPartner)
+		return true
+	endif
+
+	if (isEnemy(act) && !isEnemy(PotentialPartner)) || (!isEnemy(act) && isEnemy(PotentialPartner))
+		return true
+	endif
+
+	return false
+EndFunction
+
+
+Bool Function WillBeFollowerOnNpcScene()
+	if AllowActiveFollowers && !ActiveFollowersEngageOtherNPCs
+		return false
+	endif
+
+	if !AllowActiveFollowers && ActiveFollowersEngageOtherNPCs
+		return true
+	endif
+
+	return OUtils.ChanceRoll(50)
 EndFunction
 
 
@@ -660,12 +763,7 @@ EndFunction
 
 
 Float Function CurrentHour()
-	float time = Utility.GetCurrentGameTime()
-
-	time -= Math.Floor(time)
-	time *= 24
-
-	return time
+	return GameHour.GetValue()
 EndFunction
 
 
@@ -710,8 +808,7 @@ EndFunction
 
 Function RestartScanning()
 	if isNight()
-		SetIsNightGlobal(1.0)
-		EnemyScenesThisNight = 0
+		ResetNightVariables(1, false)
 		RegisterForSingleUpdate(ScanFreq)
 	else
 		RegisterForSingleUpdateGameTime(GetTimeUntilNight())
@@ -745,6 +842,25 @@ Int Function GetNightGlobal()
 EndFunction
 
 
+Int Function GetFollowerSceneChance()
+	float hour = CurrentHour()
+
+	int totalNightHours = (24 - MinNight) + MaxNight
+
+	float hoursSinceNightStarted = 0.0
+
+	if hour >= 0 && hour <= MaxNight
+		hoursSinceNightStarted = (24 - MinNight) + hour
+	else
+		hoursSinceNightStarted = hour - MinNight
+	endif
+
+	; as night progresses, the chance of followers engaging in OStim scenes increases
+	return Math.Ceiling((hoursSinceNightStarted / totalNightHours) * 100)
+
+EndFunction
+
+
 Function CreateJArrays()
 	NPCsInScene = JArray.object()
 	JValue.retain(NPCsInScene, "npcsInScene")
@@ -772,11 +888,15 @@ Function ClearJArrays()
 EndFunction
 
 
-Function ResetNightVariables()
-	SetIsNightGlobal(0)
+Function ResetNightVariables(int NightValue, bool ResetJArrays)
+	FollowerChanceLastHourChecked = -1
+	FollowerOtherNPCsLastHourChecked = -1
 	EnemyScenesThisNight = 0
+	FollowerScenesThisNight = 0
 
-	if JArraysCreated
+	SetIsNightGlobal(NightValue)
+
+	if JArraysCreated && ResetJArrays
 		ClearJArrays()
 	endif
 EndFunction

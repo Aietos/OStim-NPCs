@@ -9,6 +9,7 @@ Actor ThirdActor
 
 bool AlternativeBedSearchUsed
 bool IsEnemyScene
+bool IsFollowerScene
 
 ObjectReference CurrentFurniture
 
@@ -42,8 +43,8 @@ Event NpcSceneStart(string eventname, string strarg, float numarg, form sender)
 			JArray.addForm(ONpc.NPCsHadSexThisNight, ThirdActor)
 		endif
 
-		if !ONpc.IsFollower(DomActor) && !ONpc.IsFollower(SubActor) && ONpc.StopWhenFound
-			while CurrentOStimSubthread.AnimationRunning() && ONpc.StopWhenFound
+		if !IsFollowerScene && ONpc.StopWhenFound
+			while CurrentOStimSubthread.AnimationRunning() && ONpc.StopWhenFound && ONpcThreadInUse
 				if IsFound()
 					CurrentOStimSubthread.EndAnimation()
 				endif
@@ -86,11 +87,17 @@ Function SetupScene(Actor dom, Actor sub, ObjectReference furnitureObj, bool alt
 	CurrentFurniture = furnitureObj
 
 	IsEnemyScene = false
+	IsFollowerScene = false
 
 	if ONpc.IsEnemy(DomActor) && ONpc.IsEnemy(SubActor)
 		IsEnemyScene = true
 		ONpc.EnemyScenesThisNight += 1
 		ONpc.CurrentLocationEnemyScene = false
+	endif
+
+	if ONpc.IsFollower(DomActor) || ONpc.IsFollower(SubActor)
+		ONpc.FollowerScenesThisNight += 1
+		IsFollowerScene = true
 	endif
 
 	RegisterForSingleUpdate(0.01)
@@ -153,7 +160,7 @@ Event onUpdate()
 			SubActor.setposition(CurrentFurniture.x, CurrentFurniture.y, CurrentFurniture.z)
 		endif
 
-		if !ONpc.IsFollower(DomActor) && !ONpc.IsFollower(SubActor) && ONpc.StopWhenFound && isFound()
+		if !IsFollowerScene && ONpc.StopWhenFound && isFound()
 			SceneEndProcedures()
 			return
 		endif
