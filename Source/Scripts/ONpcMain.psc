@@ -354,7 +354,7 @@ EndFunction
 
 String Function GetSexType()
 	int weighttotal = weightthreesome + weightmf + weightff + weightmm
-	int randomnum = OSANative.RandomInt(0, weighttotal)
+	int randomnum = Utility.RandomInt(0, weighttotal)
 
 	if randomnum < weightthreesome
 		return "threesome"
@@ -372,11 +372,11 @@ Actor Function GetRandomActor(bool isMale)
 	Actor randomActor
 
 	if isMale
-		randomActor = ActorsMale[OSANative.RandomInt(0, ActorsMale.length - 1)]
+		randomActor = ActorsMale[Utility.RandomInt(0, ActorsMale.length - 1)]
 
 		ActorsMale = PapyrusUtil.RemoveActor(ActorsMale, randomActor)
 	else
-		randomActor = ActorsFemale[OSANative.RandomInt(0, ActorsFemale.length - 1)]
+		randomActor = ActorsFemale[Utility.RandomInt(0, ActorsFemale.length - 1)]
 
 		ActorsFemale = PapyrusUtil.RemoveActor(ActorsFemale, randomActor)
 	endif
@@ -511,8 +511,8 @@ ObjectReference Function FindEmptyFurniture(Actor Dom)
 			useFurniture = true
 
 			; If scenes are set to only start in beds, then we won't return furniture that aren't beds
-			if (FurnitureOnlyBeds || ScenesStartIn == BedsOnly)
-				if OFurniture.GetFurnitureType(currentFurniture) != OStim.FURNITURE_TYPE_BED
+			if FurnitureOnlyBeds || ScenesStartIn == BedsOnly
+				if !IsFurnitureBed(currentFurniture)
 					useFurniture = false
 				endif
 			endif
@@ -799,8 +799,8 @@ Function UpdateCurrentPlayerLocation(Location newLocation)
 		CurrentPlayerLocation = None
 	elseif CurrentPlayerLocation != newLocation
 		; RNG on top of RNG because one RNG isn't enough
-		int locationEnemySceneChance = OSANative.RandomInt(30, 100)
-		CurrentLocationEnemyScene = OSANative.RandomInt(0, 99) < locationEnemySceneChance
+		int locationEnemySceneChance = Utility.RandomInt(30, 100)
+		CurrentLocationEnemyScene = Utility.RandomInt(0, 99) < locationEnemySceneChance
 		CurrentPlayerLocation = newLocation
 	endif
 EndFunction
@@ -829,6 +829,13 @@ ONpcSubthread Function GetUnusedSubthread()
 
 		i += 1
 	endwhile
+EndFunction
+
+
+Bool Function IsFurnitureBed(ObjectReference FurnitureToCheck)
+	String furnitureType = OFurniture.GetFurnitureType(FurnitureToCheck)
+
+	return furnitureType == "bedroll" || furnitureType == "singlebed" || furnitureType == "doublebed"
 EndFunction
 
 

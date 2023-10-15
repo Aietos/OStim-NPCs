@@ -223,14 +223,14 @@ event OnOptionSliderOpen(int option)
 		SetSliderDialogStartValue(ONpc.MaxFollowerScenesPerNight)
 
 		SetSliderDialogDefaultValue(2)
-		SetSliderDialogRange(1, 5)
+		SetSliderDialogRange(1, 10)
 		SetSliderDialogInterval(1)
 
 	elseif (option == setMaxEnemyScenesPerNight)
 		SetSliderDialogStartValue(ONpc.MaxEnemyScenesPerNight)
 
 		SetSliderDialogDefaultValue(3)
-		SetSliderDialogRange(1, 5)
+		SetSliderDialogRange(1, 20)
 		SetSliderDialogInterval(1)
 
 	elseif (option == setMinRelation)
@@ -243,13 +243,13 @@ event OnOptionSliderOpen(int option)
 	elseif (option == setMinNight)
 		SetSliderDialogStartValue(ONpc.MinNight - 12)
 		SetSliderDialogDefaultValue(8)
-		SetSliderDialogRange(5, 12)
+		SetSliderDialogRange(1, 12)
 		SetSliderDialogInterval(1)
 
 	elseif (option == setMaxNight)
 		SetSliderDialogStartValue(ONpc.MaxNight)
 		SetSliderDialogDefaultValue(4.0)
-		SetSliderDialogRange(1, 6)
+		SetSliderDialogRange(1, 11)
 		SetSliderDialogInterval(1)
 
 	elseif (option == setScanFreq)

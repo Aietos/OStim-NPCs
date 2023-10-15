@@ -13,7 +13,7 @@ bool IsFollowerScene
 
 ObjectReference CurrentFurniture
 
-OStimSubthread CurrentOStimSubthread
+int CurrentOStimSubthreadID
 
 OSexIntegrationMain property OStim auto
 
@@ -35,7 +35,7 @@ EndEvent
 
 
 Event NpcSceneStart(string eventname, string strarg, float numarg, form sender)
-	if numarg == CurrentOStimSubthread.id
+	if numarg == CurrentOStimSubthreadID
 		JArray.addForm(ONpc.NPCsHadSexThisNight, DomActor)
 		JArray.addForm(ONpc.NPCsHadSexThisNight, SubActor)
 
@@ -44,9 +44,9 @@ Event NpcSceneStart(string eventname, string strarg, float numarg, form sender)
 		endif
 
 		if !IsFollowerScene && ONpc.StopWhenFound
-			while CurrentOStimSubthread.AnimationRunning() && ONpc.StopWhenFound && ONpcThreadInUse
+			while OThread.IsRunning(CurrentOStimSubthreadID) && ONpc.StopWhenFound && ONpcThreadInUse
 				if IsFound()
-					CurrentOStimSubthread.EndAnimation()
+					OThread.Stop(CurrentOStimSubthreadID)
 				endif
 
 				Utility.Wait(2)
@@ -57,19 +57,35 @@ EndEvent
 
 
 Event NpcSceneEnd(string eventname, string strarg, float numarg, form sender)
-	if numarg == CurrentOStimSubthread.id
+	if numarg == CurrentOStimSubthreadID
 		SceneEndProcedures()
 	endif
 EndEvent
 
 
 Function StartScene()
-	RegisterForModEvent("ostim_subthread_start", "NpcSceneStart")
-	RegisterForModEvent("ostim_subthread_end", "NpcSceneEnd")
+	RegisterForModEvent("ostim_thread_start", "NpcSceneStart")
+	RegisterForModEvent("ostim_thread_end", "NpcSceneEnd")
 
-	CurrentOStimSubthread = OStim.GetUnusedSubthread()
+	Actor[] actors = new Actor[2]
+	actors[0] = DomActor
+	actors[1] = SubActor
 
-	if !CurrentOStimSubthread || !CheckActorsStillValid() || !CurrentOStimSubthread.StartSubthreadScene(DomActor, SubActor, zThirdActor = ThirdActor, furnitureObj = CurrentFurniture)
+	int BuilderID = OThreadBuilder.Create(actors)
+
+	if CurrentFurniture == none
+		OThreadBuilder.NoFurniture(BuilderID)
+	else
+		OThreadBuilder.SetFurniture(BuilderID, CurrentFurniture)
+	endif
+
+	bool actorsStillValid = CheckActorsStillValid()
+
+	if actorsStillValid
+		CurrentOStimSubthreadID = OThreadBuilder.Start(BuilderID)
+	endif
+
+	if !actorsStillValid || CurrentOStimSubthreadID < 0
 		SceneEndProcedures()
 	endif
 EndFunction
@@ -173,8 +189,8 @@ EndEvent
 Function SceneEndProcedures()
 	SubthreadPackages.ClearAliases(DomActor, SubActor, Nav1, Nav2, Target)
 
-	UnregisterForModEvent("ostim_subthread_start")
-	UnregisterForModEvent("ostim_subthread_end")
+	UnregisterForModEvent("ostim_thread_start")
+	UnregisterForModEvent("ostim_thread_end")
 
 	; do this check for edge case where NPC OStim scene ends after night has ended, and thus JArrays are already cleared
 	if ONpc.JArraysCreated
@@ -267,8 +283,13 @@ bool Function CheckActorsAreInCombatState()
 EndFunction
 
 
+bool Function CheckActorsAreInDialogue()
+	return DomActor.IsInDialogueWithPlayer() || SubActor.IsInDialogueWithPlayer()
+EndFunction
+
+
 bool Function CheckActorsStillValid()
-	return CheckActorsStillLoaded() && CheckActorsStillAlive() && CheckActorsNotInScenes() && !CheckActorsAreInCombatState()
+	return CheckActorsStillLoaded() && CheckActorsStillAlive() && CheckActorsNotInScenes() && !CheckActorsAreInCombatState() && !CheckActorsAreInDialogue()
 EndFunction
 
 
