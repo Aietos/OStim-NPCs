@@ -24,6 +24,7 @@ int property MaxFollowerScenesPerNight auto
 bool property ONpcDisabled auto
 
 bool property AllowActiveFollowers auto
+bool property AllowPlayersPartners auto
 bool property ActiveFollowersEngageOtherNPCs auto
 bool property AllowElderRace auto
 bool property AllowPlayerThreesomes auto
@@ -73,6 +74,8 @@ Faction property Dlc2CultistFaction auto
 Faction property BardSingerFaction auto
 Faction property BardJobFaction auto
 Faction property FollowerFaction auto
+Faction property PlayerCourtingFaction auto
+Faction property PlayerMarriedFaction auto
 
 Keyword property LocTypeCity auto
 Keyword property LocTypeTown auto
@@ -556,7 +559,7 @@ EndFunction
 
 
 Bool Function ActorIsValid(Actor Act)
-	if IsInvalidNpc(Act) || IsPlayerORomancePartner(Act) || ActorIsInCombatState(Act) || Act.GetCurrentScene() != None || !Act.Is3DLoaded() || Act.IsInDialogueWithPlayer() || OStim.IsActorActive(Act) || IsInJArrays(Act) || ActorHasOPrivacyPackage(Act)
+	if IsInvalidNpc(Act) || IsPlayerORomancePartner(Act) || ActorIsInCombatState(Act) || Act.GetCurrentScene() != None || !Act.Is3DLoaded() || Act.IsInDialogueWithPlayer() || OStim.IsActorActive(Act) || IsInJArrays(Act) || ActorHasOPrivacyPackage(Act) || IsPlayerPartner(Act)
 		return false
 	endif
 
@@ -573,6 +576,13 @@ Bool Function IsInvalidNpc(Actor Act)
 	return !Act || Act == PlayerRef || !Act.HasKeywordString("ActorTypeNPC") || Act.IsDead() || Act.isDisabled() || Act.IsChild() || Act.isGhost() || IsInvalidNpcUserPreferences(Act)
 EndFunction
 
+Bool Function IsPlayerPartner(Actor Act)
+	if(AllowPlayersPartners)
+		return false
+	endif
+	
+	return Act.GetRelationshipRank(PlayerRef) == 4 || Act.IsInFaction(PlayerCourtingFaction) || Act.IsInFaction(PlayerMarriedFaction)
+EndFunction
 
 Bool Function IsFollower(Actor Act)
 	return Act.IsPlayerTeamMate() || Act.IsInFaction(FollowerFaction)

@@ -4,6 +4,7 @@ Scriptname ONpcMCM extends SKI_ConfigBase
 int setONpcsDisabled
 
 int setAllowActiveFollowers
+int setAllowPlayersPartners
 int setActiveFollowersEngageOtherNPCs
 int setAllowCommonEnemies
 
@@ -70,9 +71,11 @@ event OnPageReset(string page)
 	AddEmptyOption()
 
 	setAllowActiveFollowers = AddToggleOption("$onpcs_option_allow_active_followers", ONpc.AllowActiveFollowers)
+	setAllowPlayersPartners = AddToggleOption("$onpcs_option_allow_players_partners", ONpc.AllowPlayersPartners)
 	setActiveFollowersEngageOtherNPCs = AddToggleOption("$onpcs_option_active_followers_npcs", ONpc.ActiveFollowersEngageOtherNPCs)
 	setAllowElderRace = AddToggleOption("$onpcs_option_allow_elders", ONpc.AllowElderRace)
 	setAllowCommonEnemies = AddToggleOption("$onpcs_option_allow_common_enemies", ONpc.AllowCommonEnemies)
+	
 	AddEmptyOption()
 
 	setStopWhenFound = AddToggleOption("$onpcs_option_stop_when_found", ONpc.StopWhenFound)
@@ -135,6 +138,10 @@ event OnOptionSelect(int option)
 	elseif (option == setAllowActiveFollowers)
 		ONpc.AllowActiveFollowers = !ONpc.AllowActiveFollowers
 		SetToggleOptionValue(setAllowActiveFollowers, ONpc.AllowActiveFollowers)
+
+	elseif (option == setAllowPlayersPartners)
+		ONpc.AllowPlayersPartners = !ONpc.AllowPlayersPartners
+		SetToggleOptionValue(setAllowPlayersPartners, ONpc.AllowPlayersPartners)
 
 	elseif (option == setActiveFollowersEngageOtherNPCs)
 		ONpc.ActiveFollowersEngageOtherNPCs = !ONpc.ActiveFollowersEngageOtherNPCs
@@ -353,6 +360,9 @@ event OnOptionHighlight(int option)
 	elseif (option == setAllowActiveFollowers)
 		SetInfoText("$onpcs_highlight_allow_active_followers")
 
+	elseif (option == setAllowPlayersPartners)
+		SetInfoText("$onpcs_highlight_allow_players_partners")
+
 	elseif (option == setActiveFollowersEngageOtherNPCs)
 		SetInfoText("$onpcs_highlight_active_followers_npcs")
 
@@ -453,6 +463,9 @@ function ResetDefaults()
 
 	ONpc.AllowActiveFollowers = true
 	SetToggleOptionValue(setAllowActiveFollowers, ONpc.AllowActiveFollowers)
+
+	ONpc.AllowPlayersPartners = false
+	SetToggleOptionValue(setAllowPlayersPartners, ONpc.AllowPlayersPartners)
 
 	ONpc.ActiveFollowersEngageOtherNPCs = false
 	SetToggleOptionValue(setActiveFollowersEngageOtherNPCs, ONpc.ActiveFollowersEngageOtherNPCs)
