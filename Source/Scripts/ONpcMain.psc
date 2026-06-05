@@ -1,9 +1,17 @@
 Scriptname ONpcMain extends Quest
 
+; ============================================================
+; Runtime state
+; ============================================================
+
 Actor[] ActorsMale
 Actor[] ActorsFemale
 
 bool Scanning
+
+; ============================================================
+; MCM / behavior settings
+; ============================================================
 
 int property ActiveScenes auto
 
@@ -24,7 +32,6 @@ int property MaxFollowerScenesPerNight auto
 bool property ONpcDisabled auto
 
 bool property AllowActiveFollowers auto
-bool property AllowPlayersPartners auto
 bool property ActiveFollowersEngageOtherNPCs auto
 bool property AllowElderRace auto
 bool property AllowPlayerThreesomes auto
@@ -36,6 +43,11 @@ bool property EnemiesTravelToLocation auto
 bool property EnableFurniture auto
 bool property FurnitureOnlyBeds auto
 bool property EnemiesIgnoreScenesStartInRules auto
+
+bool property TMSFurnitureGuardEnabled = true auto
+bool property TMSFurnitureGuardDebug = false auto
+float property TMSFurnitureGuardRadius = 4096.0 auto
+float property TMSFurnitureNearbyBlockDistance = 192.0 auto
 
 int property ScenesStartIn auto
 int property Anywhere = 0 AutoReadOnly
@@ -53,6 +65,10 @@ bool property SettingCellChange auto
 
 GlobalVariable property ONpcIsNight auto
 GlobalVariable property GameHour auto
+
+; ============================================================
+; Forms / references
+; ============================================================
 
 Actor property PlayerRef auto
 
@@ -74,8 +90,6 @@ Faction property Dlc2CultistFaction auto
 Faction property BardSingerFaction auto
 Faction property BardJobFaction auto
 Faction property FollowerFaction auto
-Faction property PlayerCourtingFaction auto
-Faction property PlayerMarriedFaction auto
 
 Keyword property LocTypeCity auto
 Keyword property LocTypeTown auto
@@ -92,11 +106,19 @@ OSexIntegrationMain property OStim auto
 
 Quest property ONpcSubthreadQuest auto
 
+; ============================================================
+; JContainers runtime arrays
+; ============================================================
+
 int property NPCsInScene auto
 int property FurnituresInUse auto
 int property NPCsHadSexThisNight auto
 
 bool property JArraysCreated auto
+
+; ============================================================
+; Optional dependency flags / runtime counters
+; ============================================================
 
 bool ORomanceInstalled
 bool OPrivacyInstalled
@@ -128,6 +150,10 @@ Package OPCoraApproachFollower
 ; ███████╗ ╚████╔╝ ███████╗██║ ╚████║   ██║   ███████║
 ; ╚══════╝  ╚═══╝  ╚══════╝╚═╝  ╚═══╝   ╚═╝   ╚══════╝
 
+
+; ============================================================
+; Events / lifecycle
+; ============================================================
 
 Event OnInit()
 	OStim = OUtils.GetOStim()
@@ -216,6 +242,10 @@ EndEvent
 ; ╚══════╝ ╚═════╝╚═╝  ╚═╝╚═╝  ╚═══╝╚═╝  ╚═══╝╚═╝╚═╝  ╚═══╝ ╚═════╝ 
 
 
+; ============================================================
+; Main scan / scene selection
+; ============================================================
+
 Function Scan(ONpcSubthread SubthreadToUse)
 	Scanning = true
 
@@ -267,52 +297,60 @@ Function Scan(ONpcSubthread SubthreadToUse)
 		endif
 	endif
 
-	if Dom.Is3DLoaded() && Sub.Is3DLoaded() && (!Third || Third.Is3DLoaded())
-		bool alternativeBedSearch
+	if !Dom || !Sub
+		Scanning = false
+		return
+	endif
 
-		; If either actor is sleeping, we use an alternate bed search
-		; Since the normal one will not find the bed they're sleeping on
-		; We then use the bed the actor was sleeping on to prevent them from clipping into the bed
-		if Dom.GetSleepState() != 0 || Sub.GetSleepState() != 0
-			alternativeBedSearch = true
+	if !Dom.Is3DLoaded() || !Sub.Is3DLoaded() || (Third && !Third.Is3DLoaded())
+		Scanning = false
+		return
+	endif
+
+	bool alternativeBedSearch
+
+	; If either actor is sleeping, we use an alternate bed search
+	; Since the normal one will not find the bed they're sleeping on
+	; We then use the bed the actor was sleeping on to prevent them from clipping into the bed
+	if Dom.GetSleepState() != 0 || Sub.GetSleepState() != 0
+		alternativeBedSearch = true
+	endif
+
+	ObjectReference furnitureRef
+
+	if alternativeBedSearch
+		furnitureRef = FindEmptyBed(Dom, Sub, Third)
+
+		if !furnitureRef
+			Scanning = false
+			return
 		endif
+	elseif EnableFurniture
+		furnitureRef = FindEmptyFurniture(Dom, Sub, Third)
 
-		ObjectReference furnitureRef
-
-		if alternativeBedSearch
-			furnitureRef = FindEmptyBed(Dom)
-
-			if !furnitureRef
+		if (ScenesStartIn == AnyFurniture || ScenesStartIn == BedsOnly) && !furnitureRef
+			if IsEnemy(Dom) && IsEnemy(Sub)
+				if !EnemiesIgnoreScenesStartInRules
+					Scanning = False
+					return
+				endif
+			else
 				Scanning = false
 				return
 			endif
-		elseif EnableFurniture
-			furnitureRef = FindEmptyFurniture(Dom)
-
-			if (ScenesStartIn == AnyFurniture || ScenesStartIn == BedsOnly) && !furnitureRef
-				if IsEnemy(Dom) && IsEnemy(Sub)
-					if !EnemiesIgnoreScenesStartInRules
-						Scanning = False
-						return
-					endif
-				else
-					Scanning = false
-					return
-				endif
-			endif
 		endif
-
-		ActiveScenes += 1
-
-		JArray.addForm(NPCsInScene, Dom)
-		JArray.addForm(NPCsInScene, Sub)
-
-		if Third
-			JArray.addForm(NPCsInScene, third)
-		endif
-
-		SubthreadToUse.SetupScene(Dom, Sub, furnitureRef, alternativeBedSearch, None)
 	endif
+
+	ActiveScenes += 1
+
+	JArray.addForm(NPCsInScene, Dom)
+	JArray.addForm(NPCsInScene, Sub)
+
+	if Third
+		JArray.addForm(NPCsInScene, Third)
+	endif
+
+	SubthreadToUse.SetupScene(Dom, Sub, furnitureRef, alternativeBedSearch, None)
 
 	Scanning = false
 EndFunction
@@ -493,7 +531,102 @@ Actor Function GetPartnerForActor(Actor act, Actor[] ActorsArrayToUse)
 EndFunction
 
 
-ObjectReference Function FindEmptyFurniture(Actor Dom)
+; ============================================================
+; TMS Furniture Guard helpers
+; ============================================================
+
+Function TMS_FurnitureGuardLog(String MessageText)
+	if TMSFurnitureGuardDebug
+		Debug.Trace("[TMS ONPC FurnitureGuard] " + MessageText)
+	endif
+EndFunction
+
+
+Bool Function TMS_IsIgnoredFurnitureActor(Actor Act, Actor Dom, Actor Sub = None, Actor Third = None)
+	if !Act
+		return true
+	endif
+
+	if Act == Dom || Act == Sub || Act == Third
+		return true
+	endif
+
+	return false
+EndFunction
+
+
+Bool Function TMS_IsFurnitureGuardEnabled()
+	if !TMSFurnitureGuardEnabled
+		return false
+	endif
+
+	return true
+EndFunction
+
+
+Float Function TMS_GetFurnitureGuardRadius()
+	if TMSFurnitureGuardRadius <= 0.0
+		return 4096.0
+	endif
+
+	return TMSFurnitureGuardRadius
+EndFunction
+
+
+Float Function TMS_GetNearbyBlockDistance()
+	if TMSFurnitureNearbyBlockDistance <= 0.0
+		return 192.0
+	endif
+
+	return TMSFurnitureNearbyBlockDistance
+EndFunction
+
+
+Bool Function TMS_IsFurnitureOccupiedByOther(ObjectReference FurnitureToCheck, Actor Dom, Actor Sub = None, Actor Third = None)
+	if !TMS_IsFurnitureGuardEnabled()
+		return false
+	endif
+
+	if !FurnitureToCheck
+		return false
+	endif
+
+	Bool occupied = TMS_ONPCFurnitureGuardNative.IsFurnitureActuallyOccupied(FurnitureToCheck, TMS_GetFurnitureGuardRadius(), Dom, Sub, Third)
+
+	if occupied
+		TMS_FurnitureGuardLog("scan gate: native occupied furniture " + FurnitureToCheck)
+		return true
+	endif
+
+	return false
+EndFunction
+
+
+Bool Function TMS_IsFurnitureUnsafeForSceneStart(ObjectReference FurnitureToCheck, Actor Dom, Actor Sub = None, Actor Third = None)
+	if !TMS_IsFurnitureGuardEnabled()
+		return false
+	endif
+
+	if !FurnitureToCheck
+		return false
+	endif
+
+	Bool unsafe = TMS_ONPCFurnitureGuardNative.IsFurnitureBlockedOrOccupied(FurnitureToCheck, TMS_GetFurnitureGuardRadius(), TMS_GetNearbyBlockDistance(), Dom, Sub, Third)
+
+	if unsafe
+		TMS_FurnitureGuardLog("scene gate: furniture blocked or occupied " + FurnitureToCheck)
+		return true
+	endif
+
+	return false
+EndFunction
+
+
+; ============================================================
+; Furniture selection
+; ============================================================
+
+ObjectReference Function FindEmptyFurniture(Actor Dom, Actor Sub = None, Actor Third = None)
 	ObjectReference[] Furnitures = OFurniture.FindFurniture(2, Dom, (OStim.FurnitureSearchDistance + 15) * 100.0, 96)
 
 	int i = Furnitures.Length
@@ -520,6 +653,10 @@ ObjectReference Function FindEmptyFurniture(Actor Dom)
 				endif
 			endif
 
+			if useFurniture && TMS_IsFurnitureOccupiedByOther(currentFurniture, Dom, Sub, Third)
+				useFurniture = false
+			endif
+
 			if useFurniture
 				JArray.addForm(FurnituresInUse, currentFurniture)
 				return currentFurniture
@@ -531,7 +668,7 @@ ObjectReference Function FindEmptyFurniture(Actor Dom)
 EndFunction
 
 
-ObjectReference Function FindEmptyBed(Actor Dom)
+ObjectReference Function FindEmptyBed(Actor Dom, Actor Sub = None, Actor Third = None)
 	ObjectReference[] Beds = OSANative.FindBed(Dom, (OStim.FurnitureSearchDistance + 15) * 100.0, 96.0)
 
 	Int i = Beds.Length
@@ -542,13 +679,15 @@ ObjectReference Function FindEmptyBed(Actor Dom)
 		ObjectReference Bed = Beds[i]
 
 		if JArray.FindForm(FurnituresInUse, Bed) == -1
-			return Bed
+			if !TMS_IsFurnitureOccupiedByOther(Bed, Dom, Sub, Third)
+				JArray.addForm(FurnituresInUse, Bed)
+				return Bed
+			endif
 		endif
 	EndWhile
 
 	Return None
 EndFunction
-
 
 ;  █████╗  ██████╗████████╗ ██████╗ ██████╗     ██╗   ██╗████████╗██╗██╗     ███████╗
 ; ██╔══██╗██╔════╝╚══██╔══╝██╔═══██╗██╔══██╗    ██║   ██║╚══██╔══╝██║██║     ██╔════╝
@@ -558,8 +697,12 @@ EndFunction
 ; ╚═╝  ╚═╝ ╚═════╝   ╚═╝    ╚═════╝ ╚═╝  ╚═╝     ╚═════╝    ╚═╝   ╚═╝╚══════╝╚══════╝
 
 
+; ============================================================
+; Actor validation / filtering
+; ============================================================
+
 Bool Function ActorIsValid(Actor Act)
-	if IsInvalidNpc(Act) || IsPlayerORomancePartner(Act) || ActorIsInCombatState(Act) || Act.GetCurrentScene() != None || !Act.Is3DLoaded() || Act.IsInDialogueWithPlayer() || OStim.IsActorActive(Act) || IsInJArrays(Act) || ActorHasOPrivacyPackage(Act) || IsPlayerPartner(Act)
+	if IsInvalidNpc(Act) || IsPlayerORomancePartner(Act) || ActorIsInCombatState(Act) || Act.GetCurrentScene() != None || !Act.Is3DLoaded() || Act.IsInDialogueWithPlayer() || OStim.IsActorActive(Act) || IsInJArrays(Act) || ActorHasOPrivacyPackage(Act)
 		return false
 	endif
 
@@ -576,13 +719,6 @@ Bool Function IsInvalidNpc(Actor Act)
 	return !Act || Act == PlayerRef || !Act.HasKeywordString("ActorTypeNPC") || Act.IsDead() || Act.isDisabled() || Act.IsChild() || Act.isGhost() || IsInvalidNpcUserPreferences(Act)
 EndFunction
 
-Bool Function IsPlayerPartner(Actor Act)
-	if(AllowPlayersPartners)
-		return false
-	endif
-	
-	return Act.GetRelationshipRank(PlayerRef) == 4 || Act.IsInFaction(PlayerCourtingFaction) || Act.IsInFaction(PlayerMarriedFaction)
-EndFunction
 
 Bool Function IsFollower(Actor Act)
 	return Act.IsPlayerTeamMate() || Act.IsInFaction(FollowerFaction)
@@ -714,6 +850,10 @@ EndFunction
 ; ╚══════╝ ╚═════╝  ╚═════╝╚═╝  ╚═╝   ╚═╝   ╚═╝ ╚═════╝ ╚═╝  ╚═══╝     ╚═════╝    ╚═╝   ╚═╝╚══════╝╚══════╝
 
 
+; ============================================================
+; Location checks
+; ============================================================
+
 Bool Function IsSettlement(Location Loc)
 	return Loc.HasKeyword(LocTypeTown) || Loc.HasKeyword(LocTypeCity) || Loc.HasKeyword(LocTypeSettlement)
 EndFunction
@@ -765,6 +905,10 @@ EndFunction
 ; ╚═╝  ╚═══╝╚═╝ ╚═════╝ ╚═╝  ╚═╝   ╚═╝        ╚═════╝    ╚═╝   ╚═╝╚══════╝╚══════╝
 
 
+; ============================================================
+; Time helpers
+; ============================================================
+
 Bool Function IsNight()
 	float hour = CurrentHour()
 
@@ -797,6 +941,10 @@ EndFunction
 ; ╚██████╔╝███████╗██║ ╚████║███████╗██║  ██║██║  ██║███████╗    ╚██████╔╝   ██║   ██║███████╗███████║
 ;  ╚═════╝ ╚══════╝╚═╝  ╚═══╝╚══════╝╚═╝  ╚═╝╚═╝  ╚═╝╚══════╝     ╚═════╝    ╚═╝   ╚═╝╚══════╝╚══════╝
 
+
+; ============================================================
+; Utility helpers
+; ============================================================
 
 Function PrintToConsole(String In) Global
 	MiscUtil.PrintConsole("OStim NPCs: " + In)
@@ -877,6 +1025,10 @@ Int Function GetFollowerSceneChance()
 
 EndFunction
 
+
+; ============================================================
+; JArray management
+; ============================================================
 
 Function CreateJArrays()
 	NPCsInScene = JArray.object()
