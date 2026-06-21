@@ -1,5 +1,9 @@
 Scriptname ONpcSubthread extends ReferenceAlias
 
+; ============================================================
+; Runtime state
+; ============================================================
+
 int ONpcThreadID
 bool ONpcThreadInUse
 
@@ -15,6 +19,10 @@ ObjectReference CurrentFurniture
 
 int CurrentOStimSubthreadID
 
+; ============================================================
+; Properties
+; ============================================================
+
 OSexIntegrationMain property OStim auto
 
 ReferenceAlias property Nav1 auto
@@ -27,6 +35,12 @@ ONpcMain property ONpc auto
 
 ONpcSubthreadPackages property SubthreadPackages auto
 
+Float Property TMSFurnitureFinalCheckDistance = 192.0 Auto
+
+
+; ============================================================
+; Events / lifecycle
+; ============================================================
 
 Event OnInit()
 	ONpcThreadID = GetID()
@@ -63,9 +77,17 @@ Event NpcSceneEnd(string eventname, string strarg, float numarg, form sender)
 EndEvent
 
 
+; ============================================================
+; Scene setup / start
+; ============================================================
+
 Function StartScene()
-	RegisterForModEvent("ostim_thread_start", "NpcSceneStart")
-	RegisterForModEvent("ostim_thread_end", "NpcSceneEnd")
+	; Do every furniture gate before registering OStim events or starting the builder.
+	; This avoids stale ostim_thread_start callbacks from older/other threads making the log order confusing.
+	if !TMS_RunFurnitureGate("pre-start gate")
+		SceneEndProcedures()
+		return
+	endif
 
 	Actor[] actors = new Actor[2]
 	actors[0] = DomActor
@@ -76,16 +98,29 @@ Function StartScene()
 	if CurrentFurniture == none
 		OThreadBuilder.NoFurniture(BuilderID)
 	else
-		OThreadBuilder.SetFurniture(BuilderID, CurrentFurniture)
+		if !TMS_RunFurnitureGate("set-furniture gate")
+			SceneEndProcedures()
+			return
+		endif
+
+		if CurrentFurniture == none
+			OThreadBuilder.NoFurniture(BuilderID)
+		else
+			OThreadBuilder.SetFurniture(BuilderID, CurrentFurniture)
+		endif
 	endif
 
-	bool actorsStillValid = CheckActorsStillValid()
-
-	if actorsStillValid
-		CurrentOStimSubthreadID = OThreadBuilder.Start(BuilderID)
+	if !CheckActorsStillValid()
+		SceneEndProcedures()
+		return
 	endif
 
-	if !actorsStillValid || CurrentOStimSubthreadID < 0
+	RegisterForModEvent("ostim_thread_start", "NpcSceneStart")
+	RegisterForModEvent("ostim_thread_end", "NpcSceneEnd")
+
+	CurrentOStimSubthreadID = OThreadBuilder.Start(BuilderID)
+
+	if CurrentOStimSubthreadID < 0
 		SceneEndProcedures()
 	endif
 EndFunction
@@ -93,6 +128,7 @@ EndFunction
 
 Function SetupScene(Actor dom, Actor sub, ObjectReference furnitureObj, bool alternativeBedSearch, Actor third = none)
 	ONpcThreadInUse = true
+	CurrentOStimSubthreadID = -1
 
 	DomActor = dom
 	SubActor = sub
@@ -119,6 +155,10 @@ Function SetupScene(Actor dom, Actor sub, ObjectReference furnitureObj, bool alt
 	RegisterForSingleUpdate(0.01)
 EndFunction
 
+
+; ============================================================
+; Scene flow
+; ============================================================
 
 Event onUpdate()
 	if !ONpc.TravelToLocation || (IsEnemyScene && !ONpc.EnemiesTravelToLocation)
@@ -151,8 +191,11 @@ Event onUpdate()
 		DomActor.setposition(SubActor.x, SubActor.y, SubActor.z)
 
 		if CurrentFurniture != none
-			DomActor.setposition(CurrentFurniture.x, CurrentFurniture.y, CurrentFurniture.z)
-			SubActor.setposition(CurrentFurniture.x, CurrentFurniture.y, CurrentFurniture.z)
+
+			if CurrentFurniture != none
+				DomActor.setposition(CurrentFurniture.x, CurrentFurniture.y, CurrentFurniture.z)
+				SubActor.setposition(CurrentFurniture.x, CurrentFurniture.y, CurrentFurniture.z)
+			endif
 		endif
 
 		SubthreadPackages.ClearAliases(DomActor, SubActor, Nav1, Nav2, Target)
@@ -172,8 +215,11 @@ Event onUpdate()
 				return
 			endif
 
-			DomActor.setposition(CurrentFurniture.x, CurrentFurniture.y, CurrentFurniture.z)
-			SubActor.setposition(CurrentFurniture.x, CurrentFurniture.y, CurrentFurniture.z)
+
+			if CurrentFurniture != none
+				DomActor.setposition(CurrentFurniture.x, CurrentFurniture.y, CurrentFurniture.z)
+				SubActor.setposition(CurrentFurniture.x, CurrentFurniture.y, CurrentFurniture.z)
+			endif
 		endif
 
 		if !IsFollowerScene && ONpc.StopWhenFound && isFound()
@@ -185,6 +231,121 @@ Event onUpdate()
 	endif
 EndEvent
 
+
+; ============================================================
+; TMS Furniture Guard gates
+; ============================================================
+
+Function TMS_FinalTrace(String msg, Bool ForceLog = false)
+	if ForceLog
+		Debug.Trace("[TMS ONPC FurnitureGuard] " + msg)
+		return
+	endif
+
+	if ONpc && ONpc.TMSFurnitureGuardDebug
+		Debug.Trace("[TMS ONPC FurnitureGuard] " + msg)
+	endif
+EndFunction
+
+
+Float Function TMS_GetFinalCheckDistance()
+	if TMSFurnitureFinalCheckDistance <= 0.0
+		return 192.0
+	endif
+
+	return TMSFurnitureFinalCheckDistance
+EndFunction
+
+
+Bool Function TMS_CanFallbackToNoFurniture()
+	if AlternativeBedSearchUsed
+		return false
+	endif
+
+	if ONpc.ScenesStartIn == ONpc.AnyFurniture || ONpc.ScenesStartIn == ONpc.BedsOnly
+		if IsEnemyScene && ONpc.EnemiesIgnoreScenesStartInRules
+			return true
+		endif
+
+		return false
+	endif
+
+	return true
+EndFunction
+
+
+Function TMS_ReleaseCurrentFurnitureLock()
+	if ONpc.JArraysCreated && CurrentFurniture
+		JArray.EraseForm(ONpc.FurnituresInUse, CurrentFurniture)
+	endif
+EndFunction
+
+
+Bool Function TMS_RunFurnitureGate(String StageName)
+	if !CurrentFurniture
+		TMS_FinalTrace(StageName + ": no furniture, allow no-furniture path")
+		return true
+	endif
+
+	if !DomActor || !SubActor
+		TMS_FinalTrace(StageName + ": missing actors, abort", true)
+		return false
+	endif
+
+	Float finalCheckDistance = TMS_GetFinalCheckDistance()
+	Bool closeEnough = false
+
+	if DomActor.GetDistance(CurrentFurniture) <= finalCheckDistance
+		closeEnough = true
+	endif
+
+	if SubActor.GetDistance(CurrentFurniture) <= finalCheckDistance
+		closeEnough = true
+	endif
+
+	if ThirdActor && ThirdActor.GetDistance(CurrentFurniture) <= finalCheckDistance
+		closeEnough = true
+	endif
+
+	if !closeEnough
+		TMS_FinalTrace(StageName + ": early safety check, actors not close yet " + CurrentFurniture)
+	else
+		TMS_FinalTrace(StageName + ": checking furniture " + CurrentFurniture)
+	endif
+
+	if !ONpc.TMS_IsFurnitureUnsafeForSceneStart(CurrentFurniture, DomActor, SubActor, ThirdActor)
+		TMS_FinalTrace(StageName + ": furniture still available " + CurrentFurniture)
+		return true
+	endif
+
+	TMS_FinalTrace(StageName + ": furniture blocked or occupied " + CurrentFurniture, true)
+
+	TMS_ReleaseCurrentFurnitureLock()
+
+	if TMS_CanFallbackToNoFurniture()
+		TMS_FinalTrace(StageName + ": fallback to ONPC no-furniture path", true)
+		CurrentFurniture = None
+		return true
+	endif
+
+	TMS_FinalTrace(StageName + ": furniture required, abort subthread", true)
+	return false
+EndFunction
+
+
+Bool Function TMS_PreStartFurnitureGate()
+	return TMS_RunFurnitureGate("pre-start gate")
+EndFunction
+
+
+Bool Function TMS_HandleFinalFurnitureCheck()
+	return TMS_RunFurnitureGate("furniture gate")
+EndFunction
+
+
+; ============================================================
+; Cleanup
+; ============================================================
 
 Function SceneEndProcedures()
 	SubthreadPackages.ClearAliases(DomActor, SubActor, Nav1, Nav2, Target)
@@ -201,10 +362,15 @@ Function SceneEndProcedures()
 		JArray.EraseForm(ONpc.FurnituresInUse, CurrentFurniture)
 	endif
 
+	CurrentOStimSubthreadID = -1
 	ONpcThreadInUse = false
 	ONpc.activeScenes -= 1
 EndFunction
 
+
+; ============================================================
+; Travel / validation helpers
+; ============================================================
 
 bool Function Invite()
 	SubthreadPackages.TravelToActor(DomActor, SubActor, Nav1, Nav2, Target)
@@ -240,11 +406,19 @@ EndFunction
 
 
 bool Function GoToFurniture()
+	if !TMS_RunFurnitureGate("go-to before travel")
+		return false
+	endif
+
+	if !CurrentFurniture
+		return true
+	endif
+
 	SubthreadPackages.TravelToFurniture(DomActor, SubActor, CurrentFurniture, Nav1, Nav2, Target)
 
 	int stuckTimer = 0
 
-	while DomActor.GetDistance(CurrentFurniture) > 128 && SubActor.GetDistance(CurrentFurniture) > 128
+	while CurrentFurniture && DomActor.GetDistance(CurrentFurniture) > 128 && SubActor.GetDistance(CurrentFurniture) > 128
 		if !CheckActorsStillValid()
 			return false
 		endif
@@ -252,11 +426,16 @@ bool Function GoToFurniture()
 		stucktimer += 1
 
 		if stucktimer >= 20
+			TMS_FinalTrace("go-to after travel: travel timed out, let later gate handle it " + CurrentFurniture, true)
 			return true
 		else
 			utility.wait(1)
 		endif
 	endwhile
+
+	if !TMS_RunFurnitureGate("go-to after travel")
+		return false
+	endif
 
 	SubthreadPackages.ClearAliases(DomActor, SubActor, Nav1, Nav2, Target)
 
