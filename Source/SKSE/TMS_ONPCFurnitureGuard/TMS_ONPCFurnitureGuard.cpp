@@ -1,74 +1,24 @@
 #include "PCH.h"
 
-#ifndef NOMINMAX
-#define NOMINMAX
-#endif
-
-#include <KnownFolders.h>
-#include <ShlObj_core.h>
-
-#pragma comment(lib, "Shell32.lib")
-#pragma comment(lib, "Ole32.lib")
-
-#include <cstdlib>
-#include <filesystem>
-#include <memory>
-#include <string>
-
-#include <spdlog/spdlog.h>
-#include <spdlog/sinks/basic_file_sink.h>
-
 namespace
 {
-    constexpr const char* kPluginName = "TMS_ONPCFurnitureGuard";
-    constexpr const char* kLogFileName = "TMS_ONPCFurnitureGuard.log";
+    constexpr const char* kPluginName = "OStimNPCs";
+    constexpr const char* kLogFileName = "OStimNPCs.log";
 
     constexpr bool kVerboseScanLog = false;
-
-    std::filesystem::path GetDocumentsPath()
-    {
-        PWSTR knownPath = nullptr;
-
-        const HRESULT result = SHGetKnownFolderPath(FOLDERID_Documents, KF_FLAG_DEFAULT, nullptr, &knownPath);
-        if (SUCCEEDED(result) && knownPath) {
-            std::filesystem::path path = knownPath;
-            CoTaskMemFree(knownPath);
-            return path;
-        }
-
-        if (knownPath) {
-            CoTaskMemFree(knownPath);
-        }
-
-        char* userProfile = nullptr;
-        std::size_t len = 0;
-
-        if (_dupenv_s(&userProfile, &len, "USERPROFILE") == 0 && userProfile && userProfile[0] != '\0') {
-            std::filesystem::path path = std::filesystem::path(userProfile) / "Documents";
-            std::free(userProfile);
-            return path;
-        }
-
-        if (userProfile) {
-            std::free(userProfile);
-        }
-
-        return std::filesystem::current_path();
-    }
-
-    std::filesystem::path GetLogPath()
-    {
-        return GetDocumentsPath() /
-            "My Games" /
-            "Skyrim Special Edition" /
-            "SKSE" /
-            kLogFileName;
-    }
 
     void InitLogger()
     {
         try {
-            const auto logPath = GetLogPath();
+            // SKSE's log directory resolves the correct "My Games" folder for SE/AE, GOG and VR
+            auto logDir = SKSE::log::log_directory();
+            if (!logDir) {
+                // Runs at plugin load, before the game UI exists, so the debugger output is the only place to report it
+                REX::W32::OutputDebugStringA("OStimNPCs: logger init failed (no log directory)\n");
+                return;
+            }
+
+            const auto logPath = *logDir / kLogFileName;
             std::filesystem::create_directories(logPath.parent_path());
 
             auto sink = std::make_shared<spdlog::sinks::basic_file_sink_mt>(logPath.string(), true);
@@ -81,8 +31,8 @@ namespace
 
             spdlog::info("{}: logger initialized", kPluginName);
             spdlog::info("{}: log path = {}", kPluginName, logPath.string());
-        } catch (const std::exception&) {
-            RE::DebugNotification("TMS_ONPCFurnitureGuard: logger init failed");
+        } catch (const std::exception& e) {
+            REX::W32::OutputDebugStringA(std::format("OStimNPCs: logger init failed: {}\n", e.what()).c_str());
         }
     }
 
@@ -92,7 +42,7 @@ namespace
             return "None";
         }
 
-        return fmt::format("{:08X}", a_form->GetFormID());
+        return std::format("{:08X}", a_form->GetFormID());
     }
 
     RE::AIProcess* GetActorProcess(RE::Actor* a_actor)
@@ -101,11 +51,8 @@ namespace
             return nullptr;
         }
 
-#ifdef ENABLE_SKYRIM_AE
+        // Runtime-independent accessor (Actor layout differs between SE, AE and VR)
         return a_actor->GetActorRuntimeData().currentProcess;
-#else
-        return a_actor->currentProcess;
-#endif
     }
 
     RE::NiPointer<RE::TESObjectREFR> GetOccupiedFurniturePtr(RE::Actor* a_actor)
@@ -229,7 +176,7 @@ namespace
 
             matched = true;
 
-            spdlog::info(
+            spdlog::debug(
                 "{}: native occupied furniture={} occupant={} name={} occupiedCount={} distSq={}",
                 kPluginName,
                 FormIDString(a_furniture),
@@ -249,7 +196,7 @@ namespace
 
             matched = true;
 
-            spdlog::info(
+            spdlog::debug(
                 "{}: nearby blocker furniture={} blocker={} name={} blockedCount={} distSq={}",
                 kPluginName,
                 FormIDString(a_furniture),
@@ -340,9 +287,7 @@ namespace
             return result;
         }
 
-        processLists->ForEachHighActor([&](RE::Actor& a_actorRef) {
-            RE::Actor* actor = std::addressof(a_actorRef);
-
+        processLists->ForEachHighActor([&](RE::Actor* actor) {
             if (!actor) {
                 return RE::BSContainer::ForEachResult::kContinue;
             }

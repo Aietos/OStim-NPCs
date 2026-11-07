@@ -15,6 +15,8 @@ bool AlternativeBedSearchUsed
 bool IsEnemyScene
 bool IsFollowerScene
 
+bool SceneCountersReserved
+
 ObjectReference CurrentFurniture
 
 int CurrentOStimSubthreadID
@@ -37,6 +39,8 @@ ONpcSubthreadPackages property SubthreadPackages auto
 
 Float Property TMSFurnitureFinalCheckDistance = 192.0 Auto
 
+Float Property CombatStopDistance = 4096.0 Auto
+
 
 ; ============================================================
 ; Events / lifecycle
@@ -50,6 +54,8 @@ EndEvent
 
 Event NpcSceneStart(string eventname, string strarg, float numarg, form sender)
 	if numarg == CurrentOStimSubthreadID
+		int threadID = CurrentOStimSubthreadID
+
 		JArray.addForm(ONpc.NPCsHadSexThisNight, DomActor)
 		JArray.addForm(ONpc.NPCsHadSexThisNight, SubActor)
 
@@ -57,15 +63,16 @@ Event NpcSceneStart(string eventname, string strarg, float numarg, form sender)
 			JArray.addForm(ONpc.NPCsHadSexThisNight, ThirdActor)
 		endif
 
-		if !IsFollowerScene && ONpc.StopWhenFound
-			while OThread.IsRunning(CurrentOStimSubthreadID) && ONpc.StopWhenFound && ONpcThreadInUse
-				if IsFound()
-					OThread.Stop(CurrentOStimSubthreadID)
-				endif
+		; Watch the scene while it runs. threadID is captured so this loop can't end up watching
+		; a newer scene if this subthread gets reused while it's waiting.
+		while ONpcThreadInUse && threadID == CurrentOStimSubthreadID && OThread.IsRunning(threadID)
+			if ShouldStopScene()
+				OThread.Stop(threadID)
+				return
+			endif
 
-				Utility.Wait(2)
-			endwhile
-		endif
+			Utility.Wait(2)
+		endwhile
 	endif
 EndEvent
 
@@ -122,7 +129,10 @@ Function StartScene()
 
 	if CurrentOStimSubthreadID < 0
 		SceneEndProcedures()
+		return
 	endif
+
+	SceneCountersReserved = false
 EndFunction
 
 
@@ -141,6 +151,9 @@ Function SetupScene(Actor dom, Actor sub, ObjectReference furnitureObj, bool alt
 	IsEnemyScene = false
 	IsFollowerScene = false
 
+	; The per-night counters are reserved here so concurrent setups can't exceed the limits,
+	; and refunded in SceneEndProcedures if the scene never starts.
+	; Otherwise every failed attempt used up a slot, and followers could be locked out for the whole night.
 	if ONpc.IsEnemy(DomActor) && ONpc.IsEnemy(SubActor)
 		IsEnemyScene = true
 		ONpc.EnemyScenesThisNight += 1
@@ -151,6 +164,8 @@ Function SetupScene(Actor dom, Actor sub, ObjectReference furnitureObj, bool alt
 		ONpc.FollowerScenesThisNight += 1
 		IsFollowerScene = true
 	endif
+
+	SceneCountersReserved = IsEnemyScene || IsFollowerScene
 
 	RegisterForSingleUpdate(0.01)
 EndFunction
@@ -362,9 +377,29 @@ Function SceneEndProcedures()
 		JArray.EraseForm(ONpc.FurnituresInUse, CurrentFurniture)
 	endif
 
+	RefundSceneCounters()
+
 	CurrentOStimSubthreadID = -1
 	ONpcThreadInUse = false
 	ONpc.activeScenes -= 1
+EndFunction
+
+
+Function RefundSceneCounters()
+	if !SceneCountersReserved
+		return
+	endif
+
+	SceneCountersReserved = false
+
+	; the counters may have been reset by the night ending while this setup was running
+	if IsFollowerScene && ONpc.FollowerScenesThisNight > 0
+		ONpc.FollowerScenesThisNight -= 1
+	endif
+
+	if IsEnemyScene && ONpc.EnemyScenesThisNight > 0
+		ONpc.EnemyScenesThisNight -= 1
+	endif
 EndFunction
 
 
@@ -477,6 +512,26 @@ bool Function IsFound()
 		return true
 	endif
 	return false
+EndFunction
+
+
+; OStim already stops a scene when one of its actors IsInCombat(). This also covers
+; combat happening around the scene that hasn't pulled the scene actors in
+bool Function IsCombatNearScene()
+	if DomActor.GetCombatState() != 0 || SubActor.GetCombatState() != 0 || (ThirdActor && ThirdActor.GetCombatState() != 0)
+		return true
+	endif
+
+	return PlayerRef.IsInCombat() && DomActor.GetDistance(PlayerRef) <= CombatStopDistance
+EndFunction
+
+
+bool Function ShouldStopScene()
+	if IsCombatNearScene()
+		return true
+	endif
+
+	return !IsFollowerScene && ONpc.StopWhenFound && IsFound()
 EndFunction
 
 

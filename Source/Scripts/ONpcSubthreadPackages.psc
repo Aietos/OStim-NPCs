@@ -1,9 +1,6 @@
 Scriptname ONpcSubthreadPackages extends Quest
 
 Function TravelToActor(Actor Act, Actor TargetActor, ReferenceAlias Navigator1, ReferenceAlias Navigator2, ReferenceAlias NavigationTarget)
-	act.StartCombat(act)
-	TargetActor.StartCombat(TargetActor)
-
 	NavigationTarget.ForceRefTo(TargetActor)
 
 	Navigator1.ForceRefTo(Act)

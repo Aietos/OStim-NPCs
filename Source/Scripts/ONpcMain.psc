@@ -39,6 +39,7 @@ bool property AllowCommonEnemies auto
 bool property StopWhenFound auto
 bool property TravelToLocation auto
 bool property EnemiesTravelToLocation auto
+bool property AllowPlayersPartners auto
 
 bool property EnableFurniture auto
 bool property FurnitureOnlyBeds auto
@@ -90,6 +91,8 @@ Faction property Dlc2CultistFaction auto
 Faction property BardSingerFaction auto
 Faction property BardJobFaction auto
 Faction property FollowerFaction auto
+Faction property PlayerCourtingFaction auto
+Faction property PlayerMarriedFaction auto
 
 Keyword property LocTypeCity auto
 Keyword property LocTypeTown auto
@@ -262,6 +265,11 @@ Function Scan(ONpcSubthread SubthreadToUse)
 
 	string SexType = GetSexType()
 
+	if SexType == ""
+		Scanning = false
+		return
+	endif
+
 	if SexType == "mf" || SexType == "threesome"
 		if !ActorsMale.length || !ActorsFemale.length
 			Scanning = false
@@ -395,17 +403,30 @@ EndFunction
 
 String Function GetSexType()
 	int weighttotal = weightthreesome + weightmf + weightff + weightmm
-	int randomnum = Utility.RandomInt(0, weighttotal)
+
+	if weighttotal <= 0
+		return ""
+	endif
+
+	int randomnum = Utility.RandomInt(0, weighttotal - 1)
 
 	if randomnum < weightthreesome
 		return "threesome"
-	elseif (randomnum >= weightthreesome) && (randomnum <= (weightthreesome + weightmf))
-		return "mf"
-	elseif (randomnum > (weightthreesome + weightmf)) && (randomnum <= (weightthreesome + weightmf + weightff))
-		return "ff"
-	else
-		return "mm"
 	endif
+
+	randomnum -= weightthreesome
+
+	if randomnum < weightmf
+		return "mf"
+	endif
+
+	randomnum -= weightmf
+
+	if randomnum < weightff
+		return "ff"
+	endif
+
+	return "mm"
 EndFunction
 
 
@@ -702,7 +723,7 @@ EndFunction
 ; ============================================================
 
 Bool Function ActorIsValid(Actor Act)
-	if IsInvalidNpc(Act) || IsPlayerORomancePartner(Act) || ActorIsInCombatState(Act) || Act.GetCurrentScene() != None || !Act.Is3DLoaded() || Act.IsInDialogueWithPlayer() || OStim.IsActorActive(Act) || IsInJArrays(Act) || ActorHasOPrivacyPackage(Act)
+	if IsInvalidNpc(Act) || IsPlayerORomancePartner(Act) || ActorIsInCombatState(Act) || Act.GetCurrentScene() != None || !Act.Is3DLoaded() || Act.IsInDialogueWithPlayer() || OStim.IsActorActive(Act) || IsInJArrays(Act) || ActorHasOPrivacyPackage(Act) || IsPlayerPartner(Act)
 		return false
 	endif
 
@@ -717,6 +738,15 @@ EndFunction
 
 Bool Function IsInvalidNpc(Actor Act)
 	return !Act || Act == PlayerRef || !Act.HasKeywordString("ActorTypeNPC") || Act.IsDead() || Act.isDisabled() || Act.IsChild() || Act.isGhost() || IsInvalidNpcUserPreferences(Act)
+EndFunction
+
+
+Bool Function IsPlayerPartner(Actor Act)
+	if (AllowPlayersPartners)
+		return false
+	endif
+	
+	return Act.GetRelationshipRank(PlayerRef) == 4 || Act.IsInFaction(PlayerCourtingFaction) || Act.IsInFaction(PlayerMarriedFaction)
 EndFunction
 
 
